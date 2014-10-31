@@ -2392,28 +2392,6 @@ char *source, *destination, start, end;
 		}
 }
 
-char *Abbreviate(string,n)
-char *string;
-int n;
-{
-	/* This function returns an abbreviated substring of the original,
-	   including a '~' character if a non-blank character is chopped
-	   out of the generated substring.  n is the length of the desired
-	   substring.  It is used for abbreviating satellite names. */
-
-	strncpy(temp,string,79);
-
-	if (temp[n]!=0 && temp[n]!=32)
-	{
-		temp[n-2]='~';
-		temp[n-1]=temp[strlen(temp)-1];
-	}
-
-	temp[n]=0;
-
-	return temp;
-}
-
 char KepCheck(line1,line2)
 char *line1, *line2;
 {
@@ -4060,9 +4038,7 @@ double NextAOS()
 void MultiTrack()
 {
 	/* This function tracks all satellites in the program's
-	   database simultaneously until 'Q' or ESC is pressed.
-	   Satellites in range are HIGHLIGHTED.  Coordinates
-	   for the Sun and Moon are also displayed. */
+	   database simultaneously. */
 
 	int		x, y, z, ans;
 
@@ -4070,22 +4046,6 @@ void MultiTrack()
 
 	double		aos[24], aos2[24], temptime,
 			nextcalctime=0.0, los[24], aoslos[24];
-
-	if (xterm)
-		fprintf(stderr,"\033]0;PREDICT: Multi-Satellite Tracking Mode\007");
-
-	curs_set(0);
-	attrset(COLOR_PAIR(6)|A_REVERSE|A_BOLD);
-	clear();
-
-	printw("                                                                                ");
-	printw("                     PREDICT Real-Time Multi-Tracking Mode                      ");
-	printw("                    Current Date/Time:                                          ");
-	printw("                                                                                ");
-
-	attrset(COLOR_PAIR(2)|A_REVERSE);
-
-	printw(" Satellite  Az   El %s  %s  Range  | Satellite  Az   El %s  %s  Range   ",(io_lat=='N'?"LatN":"LatS"),(io_lon=='W'?"LonW":"LonE"),(io_lat=='N'?"LatN":"LatS"),(io_lon=='W'?"LonW":"LonE"));
 
 	for (x=0; x<24; x++)
 	{
@@ -4104,19 +4064,7 @@ void MultiTrack()
 	{
 		for (z=0; z<24; z++)
 		{
-			y=z/2;
-
-			if (z%2)
-			{
-				indx=y+12;
-				x=41;
-			}
-
-			else
-			{
-				indx=y;
-				x=1;
-			}
+			y = z;
 
 			if (sat[indx].meanmo!=0.0 && Decayed(indx,0.0)!=1)
 			{
@@ -4126,13 +4074,11 @@ void MultiTrack()
 
 				if (sat_ele>=0.0)
 				{
-					attrset(COLOR_PAIR(2)|A_BOLD);
 					inrange[indx]=1;
 				}
 
 				else
 				{
-					attrset(COLOR_PAIR(2));
 					inrange[indx]=0;
 				}
 
@@ -4146,8 +4092,6 @@ void MultiTrack()
 
 				else
 					sunstat='N';
-
-				mvprintw(y+6,x,"%-10s%3.0f  %+3.0f  %3.0f   %3.0f %6.0f %c", Abbreviate(sat[indx].name,9),sat_azi,sat_ele,(io_lat=='N'?+1:-1)*sat_lat,(io_lon=='W'?360.0-sat_lon:sat_lon),sat_range,sunstat);
 
 				if (socket_flag)
 				{
@@ -4172,24 +4116,9 @@ void MultiTrack()
 						squint_array[indx]=360.0;
 
 					FindSun(daynum);
-					sprintf(tracking_mode,"MULTI\n%c",0);
 				}
 
-				attrset(COLOR_PAIR(4)|A_BOLD);
-				mvprintw(20,5,"   Sun   ");
-				mvprintw(21,5,"---------");
-				attrset(COLOR_PAIR(3)|A_BOLD);
-				mvprintw(22,5,"%-7.2fAz",sun_azi);
-				mvprintw(23,4,"%+-6.2f  El",sun_ele);
-
 				FindMoon(daynum);
-
-				attrset(COLOR_PAIR(4)|A_BOLD);
-				mvprintw(20,65,"  Moon  ");
-				mvprintw(21,65,"---------");
-				attrset(COLOR_PAIR(3)|A_BOLD);
-				mvprintw(22,65,"%-7.2fAz",moon_az);
-				mvprintw(23,64,"%+-6.2f  El",moon_el);
 
 				/* Calculate Next Event (AOS/LOS) Times */
 
@@ -4224,8 +4153,6 @@ void MultiTrack()
 
 			if (Decayed(indx,0.0))
 			{
-				attrset(COLOR_PAIR(2));
-				mvprintw(y+6,x,"%-10s---------- Decayed ---------", Abbreviate(sat[indx].name,9));
 
 				if (socket_flag)
 				{
@@ -4248,10 +4175,7 @@ void MultiTrack()
 			}
  		}
 
-		attrset(COLOR_PAIR(6)|A_REVERSE|A_BOLD);
-
 		daynum=CurrentDaynum();
-		mvprintw(2,39,"%s",Daynum2String(daynum));
 
 		if (daynum>nextcalctime)
 		{
@@ -4270,19 +4194,10 @@ void MultiTrack()
 						satindex[y+1]=x;
 					}
 
-			/* Display list of upcoming passes */
-
-			attrset(COLOR_PAIR(4)|A_BOLD);
-			mvprintw(19,31,"Upcoming Passes");
-			mvprintw(20,31,"---------------");
-			attrset(COLOR_PAIR(3)|A_BOLD);
-
 			for (x=0, y=0, z=-1; x<21 && y!=3; x++)
 			{
 				if (ok2predict[satindex[x]] && aos2[x]!=0.0)
 				{
-					mvprintw(y+21,19,"%10s on %s UTC",Abbreviate(sat[(int)satindex[x]].name,9),Daynum2String(aos2[x]));
-
 					if (z==-1)
 						z=x;
 					y++;
@@ -4293,25 +4208,14 @@ void MultiTrack()
 				nextcalctime=aos2[z];
 		}
 
-		refresh();
-		halfdelay(2);  /* Increase if CPU load is too high */
-		ans=tolower(getch());
-
-		/* If we receive a RELOAD_TLE command through the
-		   socket connection, or an 'r' through the keyboard,
-		   reload the TLE file.  */
-
-		if (reload_tle || ans=='r')
+		if (reload_tle)
 		{
 			ReadDataFiles();
 			reload_tle=0;
 			nextcalctime=0.0;
 		}
 
-	} while (ans!='q' && ans!=27);
-
-	cbreak();
-	sprintf(tracking_mode, "NONE\n%c",0);
+	} while (true);
 }
 
 // NOTE: CLEANUP (never called)
