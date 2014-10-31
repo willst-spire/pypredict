@@ -2713,6 +2713,11 @@ char ReadDataFiles()
 
 	fd=fopen(qthfile,"r");
 	
+	if (fd == NULL) {
+		fprintf(stderr, "Failed to read %s\n", qthfile);
+		exit(-1);
+	}
+
 	if (fd!=NULL)
 	{
 		fgets(qth.callsign,16,fd);
@@ -2731,6 +2736,10 @@ char ReadDataFiles()
 	}
 
 	fd=fopen(tlefile,"r");
+	if (fd == NULL) {
+		fprintf(stderr, "Failed to read %s\n", qthfile);
+		exit(-1);
+	}
 
 	if (fd!=NULL)
 	{
@@ -2995,12 +3004,11 @@ int AutoUpdate(string)
 char *string;
 {
 	/* This function updates PREDICT's orbital datafile from a NASA
-	   2-line element file either through a menu (interactive mode)
-	   or via the command line.  string==filename of 2-line element
+	   via the command line.  string==filename of 2-line element
 	   set if this function is invoked via the command line. */
 
 	char line1[80], line2[80], str0[80], str1[80], str2[80],
-	     filename[50], saveflag=0, interactive=0, savecount=0;
+	     filename[50], saveflag=0, savecount=0;
 
 	float database_epoch=0.0, tle_epoch=0.0, database_year, tle_year;
 	int i, success=0, kepcount=0;
@@ -3008,29 +3016,7 @@ char *string;
 
 	do
 	{
-		if (string[0]==0)
-		{
-			interactive=1;
-			curs_set(1);
-			bkgdset(COLOR_PAIR(3));
-			refresh();
-			clear();
-			echo();
-
-			for (i=5; i<8; i+=2)
-				mvprintw(i,19,"------------------------------------------");
-
-			mvprintw(6,19,"* Keplerian Database Auto Update Utility *");
-			bkgdset(COLOR_PAIR(2));
-			mvprintw(19,18,"Enter NASA Two-Line Element Source File Name");
-			mvprintw(13,18,"-=> ");
-			refresh();
-			wgetnstr(stdscr,filename,49);
-			clear();
-			curs_set(0);
-		}
-		else
-			strcpy(filename,string);
+		strcpy(filename,string);
 
 		/* Prevent "." and ".." from being used as a
 		   filename, otherwise strange things happen. */
@@ -3039,21 +3025,6 @@ char *string;
 			return 0;
 
 		fd=fopen(filename,"r");
-
-		if (interactive && fd==NULL)
-		{
-			bkgdset(COLOR_PAIR(5));
-			clear();
-			move(12,0);
-
-			for (i=47; i>strlen(filename); i-=2)
-				printw(" ");
-
-			printw("*** ERROR: File \"%s\" not found! ***\n",filename);
-			beep();
-			attrset(COLOR_PAIR(7)|A_BOLD);
-			AnyKey();
-		}
 
 		if (fd!=NULL)
 		{
@@ -3107,21 +3078,7 @@ char *string;
 						{
 							if (saveflag==0)
 							{
-								if (interactive)
-								{
-									clear();
-									bkgdset(COLOR_PAIR(2));
-									mvprintw(3,35,"Updating.....");
-									refresh();
-									move(7,0);
-								}
 								saveflag=1;
-							}
-
-							if (interactive)
-							{
-								bkgdset(COLOR_PAIR(3));
-								printw("     %-15s",sat[i].name);
 							}
 
 							savecount++;
@@ -3150,47 +3107,12 @@ char *string;
 
 			fclose(fd);
 
-			if (interactive)
-			{
-				bkgdset(COLOR_PAIR(2));
-
-				if (kepcount==1)
-					mvprintw(18,21,"  Only 1 NASA Two Line Element was found.");
-				else
-					mvprintw(18,21,"%3u NASA Two Line Elements were read.",kepcount);
-
-				if (saveflag)
-				{
-					if (savecount==1)
-						mvprintw(19,21,"  Only 1 satellite was updated.");
-					else
-					{
-						if (savecount==24)
-							mvprintw(19,21,"  All satellites were updated!");
-						else
-							mvprintw(19,21,"%3u out of 24 satellites were updated.",savecount);
-					}
-				}
-
-				refresh();
-			}
-		}
-
-		if (interactive)
-		{
-			noecho();
-
-			if (strlen(filename) && fd!=NULL) 
-			{
-				attrset(COLOR_PAIR(4)|A_BOLD);
-				AnyKey();
-			}
 		}
 
 		if (saveflag)
 			SaveTLE();
 	}
-	while (success==0 && interactive);
+	while (success==0);
 
 	return (saveflag ? 0 : -1);
 }
@@ -6001,7 +5923,7 @@ char argc, *argv[];
 	int x, y, z, key=0;
 	char updatefile[80], quickfind=0, quickpredict=0,
 	     quickstring[40], outputfile[42],
-	     tle_cli[50], qth_cli[50], interactive=0;
+	     tle_cli[50], qth_cli[50];
 	struct termios oldtty, newtty;
 	pthread_t thread;
 	char *env=NULL;
@@ -6158,14 +6080,6 @@ char argc, *argv[];
 	else
 		sprintf(tlefile,"%s%c",tle_cli,0);
 
-	/* Test for interactive/non-interactive mode of operation
-	   based on command-line arguments given to PREDICT. */
-
-	if (updatefile[0] || quickfind || quickpredict)
-		interactive=0;
-	else
-		interactive=1;
-
 	x=ReadDataFiles();
 
 	if (x>1)  /* TLE file was loaded successfully */
@@ -6226,48 +6140,6 @@ char argc, *argv[];
 			printf("\n");
 
 			exit(-1);
-		}
-	}
-
-	if (interactive)
-	{
-		/* We're in interactive mode.  Prepare the screen */
-
-		/* Are we running under an xterm or equivalent? */
-
-		env=getenv("TERM");
-
-		if (env!=NULL && strncmp(env,"xterm",5)==0)
-			xterm=1;
-		else
-			xterm=0; 
-
-		/* Start ncurses */
-
-		initscr();
-		start_color();
-		cbreak();
-		noecho();
-		scrollok(stdscr,TRUE);
-		curs_set(0);
-
-		init_pair(1,COLOR_WHITE,COLOR_BLACK);
-		init_pair(2,COLOR_WHITE,COLOR_BLUE);
-		init_pair(3,COLOR_YELLOW,COLOR_BLUE);
-		init_pair(4,COLOR_CYAN,COLOR_BLUE);
-		init_pair(5,COLOR_WHITE,COLOR_RED);
-		init_pair(6,COLOR_RED,COLOR_WHITE);
-		init_pair(7,COLOR_CYAN,COLOR_RED);
-
-		if (x<3)
-		{
-			/* A problem occurred reading the
-			   default QTH and TLE files, and
-			   no -t or -q options were
-			   provided on the command-line. */
-
-			fprintf(stderr, "ERROR: Unable to read %s and %s", qthfile, tlefile);
-			exit(1);
 		}
 	}
 
