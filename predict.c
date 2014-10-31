@@ -35,8 +35,7 @@
 #include <fcntl.h>
 #include <termios.h>
 
-#include "predict.h"
-
+#define VERSION "2.2.3-spire"
 /* Constants used by SGP4/SDP4 code */
 
 #define	km2mi		0.621371		/* km to miles */
@@ -2203,7 +2202,7 @@ char *predict_name;
 		if (strncmp("GET_VERSION",buf,11)==0)
 		{
 			buff[0]=0;
-			sprintf(buff,"%s\n",version);
+			sprintf(buff,"%s\n",VERSION);
 			sendto(sock,buff,strlen(buff),0,(struct sockaddr *)&fsin,sizeof(fsin));
 			ok=1;
 		}
@@ -2347,7 +2346,7 @@ void Banner()
 
 	attrset(COLOR_PAIR(6)|A_REVERSE|A_BOLD);
 	mvprintw(3,18,"                                           ");
-	mvprintw(4,18,"         --== PREDICT  v%s ==--         ",version);
+	mvprintw(4,18,"         --== PREDICT  v%s ==--         ",VERSION);
 	mvprintw(5,18,"   Released by John A. Magliacane, KD2BD   ");
 	mvprintw(6,18,"                  May 2006                 ");
 	mvprintw(7,18,"                                           ");
@@ -5114,57 +5113,6 @@ char speak;
 				else
 					mvprintw(14,67,"              ");
 			}
-
-			if (speak=='T' && soundcard)
-			{
-				if (eclipse_alarm==0 && fabs(eclipse_depth)<0.015) /* ~1 deg */
-				{
-					/* Hold off regular announcements if
-					   satellite is within about 2 degrees
-					   of entering into or out of an
-					   eclipse. */
-
-					oldtime=CurrentDaynum();
-
-					if ((old_visibility=='V' || old_visibility=='D') && visibility=='N')
-					{
-						sprintf(command,"%svocalizer/vocalizer eclipse &",predictpath);
-						system(command);
-						eclipse_alarm=1;
-						oldtime-=0.000015*sqrt(sat_alt);
-					}
-
-					if (old_visibility=='N' && (visibility=='V' || visibility=='D'))
-					{
-						sprintf(command,"%svocalizer/vocalizer sunlight &",predictpath);
-						system(command);
-						eclipse_alarm=1;
-						oldtime-=0.000015*sqrt(sat_alt);
-					}
-				}
-
-				if ((CurrentDaynum()-oldtime)>(0.00003*sqrt(sat_alt)))
-				{
-					if (sat_range_rate<0.0)
-						approaching='+';
-
-					if (sat_range_rate>0.0)
-						approaching='-';
-
-					sprintf(command,"%svocalizer/vocalizer %.0f %.0f %c %c &",predictpath,sat_azi,sat_ele,approaching,visibility);
-					system(command);
-  					oldtime=CurrentDaynum();
-					old_visibility=visibility;
-				}
-
-				if (sat_ele<=1.0 && approaching=='-')
-				{
-					/* Suspend regular announcements
-					   as we approach LOS. */
-
-					oldtime=CurrentDaynum();
-				}
-			}
 		}
 
 		else
@@ -5268,14 +5216,6 @@ char speak;
 			nextaos=FindAOS();
 			mvprintw(22,22,"Next AOS: %s UTC",Daynum2String(nextaos));
 			aoslos=nextaos;
-
-			if (oldtime!=0.0 && speak=='T' && soundcard)
-			{
-				/* Announce LOS */
-
-				sprintf(command,"%svocalizer/vocalizer los &",predictpath);
-				system(command);
-			}
 		}
 
 		/* This is where the variables for the socket server are updated. */
@@ -5794,7 +5734,7 @@ void MainMenu()
 	refresh();
 
 	if (xterm)
-		fprintf(stderr,"\033]0;PREDICT: Version %s\007",version); 
+		fprintf(stderr,"\033]0;PREDICT: Version %s\007",VERSION); 
 }
 
 void ProgramInfo()
@@ -5802,7 +5742,7 @@ void ProgramInfo()
 	Banner();
 	attrset(COLOR_PAIR(3)|A_BOLD);
 
-	printw("\n\n\n\n\n\t\tPREDICT version : %s\n",version);
+	printw("\n\n\n\n\n\t\tPREDICT version : %s\n",VERSION);
 	printw("\t\tQTH file loaded : %s\n",qthfile);
 	printw("\t\tTLE file loaded : %s\n",tlefile);
 	printw("\t\tDatabase file   : ");
@@ -5832,51 +5772,7 @@ void ProgramInfo()
 	else
 		printw("Standalone\n");
 
-	printw("\t\tVocalizer       : ");
-
-	if (soundcard)
-		printw("Soundcard present");
-	else
-		printw("No soundcard available");
-
 	refresh();
-	attrset(COLOR_PAIR(4)|A_BOLD);
-	AnyKey();
-}
-
-void NewUser()
-{
-	int *mkdir();
-
-	Banner();
-	attrset(COLOR_PAIR(3)|A_BOLD);
-
-	mvprintw(12,2,"WELCOME to PREDICT!  Since you are a new user to the program, default\n");
-	printw("  orbital data and ground station location information was copied into\n");
-	printw("  your home directory to get you going.  Please select option [G] from\n");
-	printw("  PREDICT's main menu to edit your ground station information, and update\n");
-	printw("  your orbital database using option [U] or [E].  Enjoy the program!  :-)");
-	refresh();
-
-	/* Make "~/.predict" subdirectory */
-
-	sprintf(temp,"%s/.predict",getenv("HOME"));
-	mkdir(temp,0777);
-
-	/* Copy default files into ~/.predict directory */
-
-	sprintf(temp,"%sdefault/predict.tle",predictpath);
-
-	CopyFile(temp,tlefile);
-
-	sprintf(temp,"%sdefault/predict.db",predictpath);
-
-	CopyFile(temp,dbfile);
-
-	sprintf(temp,"%sdefault/predict.qth",predictpath);
-
-	CopyFile(temp,qthfile);
-
 	attrset(COLOR_PAIR(4)|A_BOLD);
 	AnyKey();
 }
@@ -6270,27 +6166,6 @@ char argc, *argv[];
 	else
 		interactive=1;
 
-	if (interactive)
-	{
-		sprintf(dbfile,"%s/.predict/predict.db",env);
-
-		/* If the transponder database file doesn't already
-		   exist under $HOME/.predict, and a working environment
-		   is available, place a default copy from the PREDICT
-		   distribution under $HOME/.predict. */
-
-		db=fopen(dbfile,"r");
-
-		if (db==NULL)
-		{
-			sprintf(temp,"%sdefault/predict.db",predictpath);
-			CopyFile(temp,dbfile);
-		}
-
-		else
-			fclose(db);
-	}
-
 	x=ReadDataFiles();
 
 	if (x>1)  /* TLE file was loaded successfully */
@@ -6391,9 +6266,8 @@ char argc, *argv[];
 			   no -t or -q options were
 			   provided on the command-line. */
 
-			NewUser();
-			x=ReadDataFiles();
-			QthEdit();
+			fprintf(stderr, "ERROR: Unable to read %s and %s", qthfile, tlefile);
+			exit(1);
 		}
 	}
 
