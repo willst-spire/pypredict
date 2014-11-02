@@ -18,7 +18,7 @@
 *          See the "CREDITS" file for the names of those who have           *
 *   generously contributed their time, talent, and effort to this project.  *
 \***************************************************************************/
-
+#include <stdio.h>
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
