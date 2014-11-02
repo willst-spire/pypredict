@@ -182,7 +182,7 @@ double	tsince, jul_epoch, jul_utc, eclipse_depth=0,
 char	qthfile[50], tlefile[50], dbfile[50], temp[80], output[25],
 	serial_port[15], resave=0, reload_tle=0, netport[7],
 	once_per_second=0, ephem[5], sat_sun_status, findsun,
-	calc_squint, database=0, xterm, io_lat='N', io_lon='W';
+	calc_squint, database=0, io_lat='N', io_lon='W';
 
 int	indx, antfd, iaz, iel, ma256, isplat, isplong, socket_flag=0,
 	Flags=0;
@@ -2994,205 +2994,107 @@ void SaveTLE()
 	fclose(fd);
 }
 
-int AutoUpdate(char *string)
+int AutoUpdate(char *filename)
 {
 	/* This function updates PREDICT's orbital datafile from a NASA
-	   2-line element file either through a menu (interactive mode)
-	   or via the command line.  string==filename of 2-line element
-	   set if this function is invoked via the command line. */
+	   2-line element file.  string==filename of 2-line element set. */
 
-	char line1[80], line2[80], str0[80], str1[80], str2[80],
-	     filename[50], saveflag=0, interactive=0, savecount=0;
+	char line1[80], line2[80], str0[80], str1[80], str2[80], saveflag=0, savecount=0;
 
 	float database_epoch=0.0, tle_epoch=0.0, database_year, tle_year;
-	int i, success=0, kepcount=0;
+	int i, kepcount=0;
 	FILE *fd;
 
+	/* Prevent "", ." and ".." from being used as a
+	   filename, otherwise strange things happen. */
+	if (strlen(filename)==0 || strncmp(filename,".",1)==0 || strncmp(filename,"..",2)==0)
+	{
+		fprintf(stderr, "ERROR: AutoUpdate cannot be called with \"\",\".\",\"..\"\n");
+		exit(-1);
+	}
+
+	fd=fopen(filename,"r");
+	if (fd==NULL)
+	{
+		fprintf(stderr, "ERROR: AutoUpdate could not open %s\n", filename);
+		exit(-1);
+	}
+
+	fgets(str0,75,fd);
+	fgets(str1,75,fd);
+	fgets(str2,75,fd);
+	
 	do
 	{
-		if (string[0]==0)
+		if (KepCheck(str1,str2))
 		{
-			interactive=1;
-			curs_set(1);
-			bkgdset(COLOR_PAIR(3));
-			refresh();
-			clear();
-			echo();
+			/* We found a valid TLE!
+			   Copy strings str1 and
+			   str2 into line1 and line2 */
 
-			for (i=5; i<8; i+=2)
-				mvprintw(i,19,"------------------------------------------");
+			strncpy(line1,str1,75);
+			strncpy(line2,str2,75);
+			kepcount++;
 
-			mvprintw(6,19,"* Keplerian Database Auto Update Utility *");
-			bkgdset(COLOR_PAIR(2));
-			mvprintw(19,18,"Enter NASA Two-Line Element Source File Name");
-			mvprintw(13,18,"-=> ");
-			refresh();
-			wgetnstr(stdscr,filename,49);
-			clear();
-			curs_set(0);
+			/* Scan for object number in datafile to see
+			   if this is something we're interested in */
+
+			for (i=0; (i<24 && sat[i].catnum!=atol(SubString(line1,2,6))); i++);
+
+			if (i!=24)
+			{
+				/* We found it!  Check to see if it's more
+				   recent than the data we already have. */
+
+				if (sat[i].year<57)
+					database_year=365.25*(100.0+(float)sat[i].year);
+				else
+					database_year=365.25*(float)sat[i].year;
+
+				database_epoch=(float)sat[i].refepoch+database_year;
+
+				tle_year=(float)atof(SubString(line1,18,19));
+
+				if (tle_year<57.0)
+					tle_year+=100.0;
+
+				tle_epoch=(float)atof(SubString(line1,20,31))+(tle_year*365.25);
+
+				/* Update only if TLE epoch >= epoch in data file
+				   so we don't overwrite current data with older
+				   data. */
+
+				if (tle_epoch>=database_epoch)
+				{
+					saveflag=1;
+
+					savecount++;
+
+					/* Copy TLE data into the sat data structure */
+
+					strncpy(sat[i].line1,line1,69);
+					strncpy(sat[i].line2,line2,69);
+					InternalUpdate(i);
+				}
+			}
+
+			 fgets(str0,75,fd);
+			 fgets(str1,75,fd);
+			 fgets(str2,75,fd);
 		}
 		else
-			strcpy(filename,string);
-
-		/* Prevent "." and ".." from being used as a
-		   filename, otherwise strange things happen. */
-
-		if (strlen(filename)==0 || strncmp(filename,".",1)==0 || strncmp(filename,"..",2)==0)
-			return 0;
-
-		fd=fopen(filename,"r");
-
-		if (interactive && fd==NULL)
 		{
-			bkgdset(COLOR_PAIR(5));
-			clear();
-			move(12,0);
-
-			for (i=47; i>strlen(filename); i-=2)
-				printw(" ");
-
-			printw("*** ERROR: File \"%s\" not found! ***\n",filename);
-			beep();
-			attrset(COLOR_PAIR(7)|A_BOLD);
-			AnyKey();
-		}
-
-		if (fd!=NULL)
-		{
-			success=1;
-
-			fgets(str0,75,fd);
-			fgets(str1,75,fd);
+			strcpy(str0,str1);
+			strcpy(str1,str2);
 			fgets(str2,75,fd);
-		
-			do
-			{
-				if (KepCheck(str1,str2))
-				{
-					/* We found a valid TLE!
-					   Copy strings str1 and
-					   str2 into line1 and line2 */
-
-					strncpy(line1,str1,75);
-					strncpy(line2,str2,75);
-					kepcount++;
-
-					/* Scan for object number in datafile to see
-					   if this is something we're interested in */
-
-					for (i=0; (i<24 && sat[i].catnum!=atol(SubString(line1,2,6))); i++);
-
-					if (i!=24)
-					{
-						/* We found it!  Check to see if it's more
-						   recent than the data we already have. */
-
-						if (sat[i].year<57)
-							database_year=365.25*(100.0+(float)sat[i].year);
-						else
-							database_year=365.25*(float)sat[i].year;
-
-						database_epoch=(float)sat[i].refepoch+database_year;
-
-						tle_year=(float)atof(SubString(line1,18,19));
-
-						if (tle_year<57.0)
-							tle_year+=100.0;
-
-						tle_epoch=(float)atof(SubString(line1,20,31))+(tle_year*365.25);
-
-						/* Update only if TLE epoch >= epoch in data file
-						   so we don't overwrite current data with older
-						   data. */
-
-						if (tle_epoch>=database_epoch)
-						{
-							if (saveflag==0)
-							{
-								if (interactive)
-								{
-									clear();
-									bkgdset(COLOR_PAIR(2));
-									mvprintw(3,35,"Updating.....");
-									refresh();
-									move(7,0);
-								}
-								saveflag=1;
-							}
-
-							if (interactive)
-							{
-								bkgdset(COLOR_PAIR(3));
-								printw("     %-15s",sat[i].name);
-							}
-
-							savecount++;
-
-							/* Copy TLE data into the sat data structure */
-
-							strncpy(sat[i].line1,line1,69);
-							strncpy(sat[i].line2,line2,69);
-							InternalUpdate(i);
-						}
-					}
-
-					 fgets(str0,75,fd);     	
-					 fgets(str1,75,fd);
-					 fgets(str2,75,fd);
-				}
-
-				else
-				{
-					strcpy(str0,str1);   
-					strcpy(str1,str2);   
-					fgets(str2,75,fd);
-				}
-			
-			} while (feof(fd)==0);
-
-			fclose(fd);
-
-			if (interactive)
-			{
-				bkgdset(COLOR_PAIR(2));
-
-				if (kepcount==1)
-					mvprintw(18,21,"  Only 1 NASA Two Line Element was found.");
-				else
-					mvprintw(18,21,"%3u NASA Two Line Elements were read.",kepcount);
-
-				if (saveflag)
-				{
-					if (savecount==1)
-						mvprintw(19,21,"  Only 1 satellite was updated.");
-					else
-					{
-						if (savecount==24)
-							mvprintw(19,21,"  All satellites were updated!");
-						else
-							mvprintw(19,21,"%3u out of 24 satellites were updated.",savecount);
-					}
-				}
-
-				refresh();
-			}
 		}
+	
+	} while (feof(fd)==0);
 
-		if (interactive)
-		{
-			noecho();
+	fclose(fd);
 
-			if (strlen(filename) && fd!=NULL) 
-			{
-				attrset(COLOR_PAIR(4)|A_BOLD);
-				AnyKey();
-			}
-		}
-
-		if (saveflag)
-			SaveTLE();
-	}
-	while (success==0 && interactive);
+	if (saveflag)
+		SaveTLE();
 
 	return (saveflag ? 0 : -1);
 }
@@ -4260,16 +4162,6 @@ void Predict(char mode)
 
 	if (AosHappens(indx) && Geostationary(indx)==0 && Decayed(indx,daynum)==0)
 	{
-		if (xterm)
-		{
-			strcpy(type,"Orbit");  /* Default */
-
-			if (mode=='v')
-				strcpy(type,"Visual");
-
-			fprintf(stderr,"\033]0;PREDICT: %s's %s Calendar For %s\007",qth.callsign, type, sat[indx].name);
-		}
-
 		do
 		{
 			daynum=FindAOS();
@@ -4370,9 +4262,6 @@ void PredictMoon()
 	daynum=GetStartTime('m');
 	clear();
 
-	if (xterm)
-		fprintf(stderr,"\033]0;PREDICT: %s's Orbit Calendar for the Moon\007",qth.callsign);
-
 	do
 	{
 		/* Determine moonrise */
@@ -4449,9 +4338,6 @@ void PredictSun()
 
 	daynum=GetStartTime('o');
 	clear();
-
-	if (xterm)
-		fprintf(stderr,"\033]0;PREDICT: %s's Orbit Calendar for the Sun\007",qth.callsign);
 
 	do
 	{
@@ -4931,8 +4817,6 @@ void SingleTrack(int x)
 	geostationary=Geostationary(indx);
 	decayed=Decayed(indx,0.0);
 
-	if (xterm)
-		fprintf(stderr,"\033]0;PREDICT: Tracking %-10s\007",sat[x].name); 
 	halfdelay(2);
 	curs_set(0);
 	bkgdset(COLOR_PAIR(3));
@@ -5354,9 +5238,6 @@ void MultiTrack()
 	double		aos[24], aos2[24], temptime,
 			nextcalctime=0.0, los[24], aoslos[24];
 
-	if (xterm)
-		fprintf(stderr,"\033]0;PREDICT: Multi-Satellite Tracking Mode\007");
-
 	curs_set(0);
 	attrset(COLOR_PAIR(6)|A_REVERSE|A_BOLD);
 	clear();
@@ -5613,9 +5494,6 @@ void Illumination()
 	curs_set(0);
 	clear();
 
-	if (xterm)
-		fprintf(stderr,"\033]0;PREDICT: %s's Solar Illumination Calendar For %s\007",qth.callsign, sat[indx].name);
-
 	do
 	{
 		attrset(COLOR_PAIR(4));
@@ -5725,9 +5603,7 @@ void MainMenu()
 	}
 
 	refresh();
-
-	if (xterm)
-		fprintf(stderr,"\033]0;PREDICT: Version %s\007",VERSION); 
+	
 }
 
 void ProgramInfo()
@@ -5991,7 +5867,7 @@ int main(char argc, char *argv[])
 	int x, y, z, key=0;
 	char updatefile[80], quickfind=0, quickpredict=0,
 	     quickstring[40], outputfile[42],
-	     tle_cli[50], qth_cli[50], interactive=0;
+	     tle_cli[50], qth_cli[50];
 	struct termios oldtty, newtty;
 	pthread_t thread;
 	char *env=NULL;
@@ -6154,14 +6030,6 @@ int main(char argc, char *argv[])
 	else
 		sprintf(tlefile,"%s%c",tle_cli,0);
 
-	/* Test for interactive/non-interactive mode of operation
-	   based on command-line arguments given to PREDICT. */
-
-	if (updatefile[0] || quickfind || quickpredict)
-		interactive=0;
-	else
-		interactive=1;
-
 	x=ReadDataFiles();
 
 	if (x>1)  /* TLE file was loaded successfully */
@@ -6214,37 +6082,6 @@ int main(char argc, char *argv[])
 			fprintf(stderr, "*** ERROR!  Your TLE file \"%s\" could not be loaded!\n",tlefile);
 		
 		exit(-1);
-	}
-
-	if (interactive)
-	{
-		/* We're in interactive mode.  Prepare the screen */
-
-		/* Are we running under an xterm or equivalent? */
-
-		env=getenv("TERM");
-
-		if (env!=NULL && strncmp(env,"xterm",5)==0)
-			xterm=1;
-		else
-			xterm=0; 
-
-		/* Start ncurses */
-
-		initscr();
-		start_color();
-		cbreak();
-		noecho();
-		scrollok(stdscr,TRUE);
-		curs_set(0);
-
-		init_pair(1,COLOR_WHITE,COLOR_BLACK);
-		init_pair(2,COLOR_WHITE,COLOR_BLUE);
-		init_pair(3,COLOR_YELLOW,COLOR_BLUE);
-		init_pair(4,COLOR_CYAN,COLOR_BLUE);
-		init_pair(5,COLOR_WHITE,COLOR_RED);
-		init_pair(6,COLOR_RED,COLOR_WHITE);
-		init_pair(7,COLOR_CYAN,COLOR_RED);
 	}
 
 	if (x==3)
