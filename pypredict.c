@@ -2074,21 +2074,6 @@ time_t CurrentTime()
 	return time(NULL);
 }
 
-void bailout(char *string)
-{
-	/* This function quits ncurses, resets and "beeps"
-	   the terminal, and displays an error message (string)
-	   when we need to bail out of the program in a hurry. */
-
-	beep();	
-	curs_set(1);
-	bkgdset(COLOR_PAIR(1));
-	clear();
-	refresh();
-	endwin();
-	fprintf(stderr,"*** predict: %s!\n",string);
-}
-
 double FixAngle(double x)
 {
 	/* This function reduces angles greater than
