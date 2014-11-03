@@ -19,6 +19,7 @@
 *   generously contributed their time, talent, and effort to this project.  *
 \***************************************************************************/
 
+#include <Python.h>
 #include <stdio.h>
 #include <math.h>
 #include <time.h>
@@ -3515,7 +3516,7 @@ void PrintObservation(struct observation * obs) {
     printf("Doppler         %f\n", obs->doppler);
 }
 
-int main(char argc, char *argv[])
+static PyObject* pypredict(PyObject* self, PyObject *args)
 {
 	int x;
 	char *env=NULL;
@@ -3545,8 +3546,60 @@ int main(char argc, char *argv[])
 		{
 			fprintf(stderr, "*** ERROR!  Your TLE file \"%s\" could not be loaded!\n",tlefile);
 		}
-		
-		exit(-1);
+
+		//TODO: Throw exception	
+		return NULL;
 	}
+
+	struct observation obs = { 0 };
+	double daynum;
+	long epoch;
+
+	if (!PyArg_ParseTuple(args, "l", &epoch)) {
+		//TODO: Throw exception
+		return NULL;
+	};
+	daynum=((epoch/86400.0)-3651.0);
+	MakeObservation(daynum, &obs);
+	
+	//TODO: Add reference count?
+	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:i,s:i,s:l,s:i,s:i,s:i,s:d}",
+		"norad_id", obs.norad_id,
+		"name", obs.name,
+		"epoch", obs.epoch,
+		"latitude", obs.latitude,
+		"longitude", obs.longitude,
+		"azimuth", obs.azimuth,
+		"elevation", obs.elevation,
+		"orbital_velocity", obs.orbital_velocity,
+		"footprint", obs.footprint,
+		"altitude", obs.altitude,
+		"slant_range", obs.slant_range,
+		"eclipse_depth", obs.eclipse_depth,
+		"orbital_phase", obs.orbital_phase,
+		"orbital_model", obs.orbital_model,
+		"visibility", obs.visibility,
+		"sunlit", obs.sunlit,
+		"orbit", obs.orbit,
+		"geostationary", obs.geostationary,
+		"has_aos", obs.has_aos,
+		"decayed", obs.decayed,
+		"doppler", obs.doppler
+	);
+}
+
+static char pypredict_docs[] =
+    "predict(long): Any message you want to put here!!\n";
+
+static PyMethodDef pypredict_funcs[] = {
+    {"predict", (PyCFunction)pypredict, 
+     METH_VARARGS, pypredict_docs},
+    {NULL, NULL, 0, NULL} 
+};
+
+void initpredict(void)
+{
+    Py_InitModule3("predict", pypredict_funcs,
+                   "Python port of the predict open source satellite tracking library");
 }
 
