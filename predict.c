@@ -5119,6 +5119,545 @@ void QthEdit()
 	}
 }
 
+void SingleTrackWIP() {
+    /* This function tracks a single satellite in real-time
+       until 'Q' or ESC is pressed.  x represents the index
+       of the satellite being tracked. */
+
+    int ans, oldaz=0, oldel=0, length, xponder=0,
+        polarity=0, tshift, bshift;
+    char    approaching=0, command[80], comsat, aos_alarm=0,
+        geostationary=0, aoshappens=0, decayed=0, eclipse_alarm=0,
+        visibility=0, old_visibility=0, los_alarm=0;
+    double  oldtime=0.0, nextaos=0.0, lostime=0.0, aoslos=0.0,
+        downlink=0.0, uplink=0.0, downlink_start=0.0,
+        downlink_end=0.0, uplink_start=0.0, uplink_end=0.0,
+        dopp, doppler100=0.0, delay, loss, shift;
+
+    char    lasttime_set = 0;
+    time_t  newtime, lasttime;
+
+    PreCalc(x);
+    indx=x;
+
+    if (sat_db.transponders>0)
+    {
+        comsat=1;
+        tshift=0;
+        bshift=0;
+    }
+
+    else
+    {
+        comsat=0;
+        tshift=2;
+        bshift=-2;
+    }
+
+    if (comsat)
+    {
+        downlink_start=sat_db.downlink_start[xponder];
+        downlink_end=sat_db.downlink_end[xponder];
+        uplink_start=sat_db.uplink_start[xponder];
+        uplink_end=sat_db.uplink_end[xponder];
+
+        if (downlink_start>downlink_end)
+        {
+            polarity=-1;
+        }
+
+        if (downlink_start<downlink_end)
+        {
+            polarity=1;
+        }
+
+        if (downlink_start==downlink_end)
+        {
+            polarity=0;
+        }
+
+        downlink=0.5*(downlink_start+downlink_end);
+        uplink=0.5*(uplink_start+uplink_end);
+    }
+
+    daynum=CurrentDaynum();
+    aoshappens=AosHappens(indx);
+    geostationary=Geostationary(indx);
+    decayed=Decayed(indx,0.0);
+
+    if (xterm)
+    {
+        fprintf(stderr,"\033]0;PREDICT: Tracking %-10s\007",sat.name); 
+    }
+    halfdelay(2);
+    curs_set(0);
+    bkgdset(COLOR_PAIR(3));
+    clear();
+
+    attrset(COLOR_PAIR(6)|A_REVERSE|A_BOLD);
+
+    printw("                                                                                ");
+    printw("                     PREDICT Real-Time Satellite Tracking                        ");
+    printw("                 Tracking: %-10sOn                                       ",Abbreviate(sat.name,9));
+    printw("                                                                                 ");
+
+    attrset(COLOR_PAIR(4)|A_BOLD);
+
+    mvprintw(5+tshift,1,"Satellite     Direction     Velocity     Footprint    Altitude     Slant Range");
+    mvprintw(6+tshift,1,"---------     ---------     --------     ---------    --------     -----------");
+    mvprintw(7+tshift,1,"        .            Az           mi            mi          mi              mi");
+    mvprintw(8+tshift,1,"        .            El           km            km          km              km");
+    mvprintw(16+bshift,1,"Eclipse Depth   Orbital Phase   Orbital Model   Squint Angle      AutoTracking");
+    mvprintw(17+bshift,1,"-------------   -------------   -------------   ------------      ------------");
+
+    if (comsat)
+    {
+        mvprintw(12,1,"Uplink   :");
+        mvprintw(13,1,"Downlink :");
+        mvprintw(14,1,"Delay    :");
+        mvprintw(14,55,"Echo      :");
+        mvprintw(13,29,"RX:");
+        mvprintw(13,55,"Path loss :");
+        mvprintw(12,29,"TX:");
+        mvprintw(12,55,"Path loss :");
+    }
+
+    do
+    {
+        attrset(COLOR_PAIR(6)|A_REVERSE|A_BOLD);
+        daynum=CurrentDaynum();
+        mvprintw(2,41,"%s",Daynum2String(daynum));
+        attrset(COLOR_PAIR(2)|A_BOLD);
+        Calc();
+
+        mvprintw(7+tshift,1,"%-6.2f",(io_lat=='N'?+1:-1)*sat_lat);
+        attrset(COLOR_PAIR(4)|A_BOLD);
+        mvprintw(7+tshift,8,(io_lat=='N'?"N":"S"));
+        mvprintw(8+tshift,8,(io_lon=='W'?"W":"E"));
+
+        fk=12756.33*acos(xkmper/(xkmper+sat_alt));
+        fm=fk*km2mi;
+
+        attrset(COLOR_PAIR(2)|A_BOLD);
+
+        mvprintw(7+tshift,55,"%0.f ",sat_alt*km2mi);
+        mvprintw(8+tshift,55,"%0.f ",sat_alt);
+        mvprintw(7+tshift,68,"%-5.0f",sat_range*km2mi);
+        mvprintw(8+tshift,68,"%-5.0f",sat_range);
+
+        mvprintw(8+tshift,1,"%-7.2f",(io_lon=='W'?360.0-sat_lon:sat_lon));
+        mvprintw(7+tshift,15,"%-7.2f",sat_azi);
+        mvprintw(8+tshift,14,"%+-6.2f",sat_ele);
+        mvprintw(7+tshift,29,"%0.f ",(3600.0*sat_vel)*km2mi);
+        mvprintw(8+tshift,29,"%0.f ",3600.0*sat_vel);
+
+        mvprintw(18+bshift,3,"%+6.2f%c  ",eclipse_depth/deg2rad,176);
+        mvprintw(18+bshift,20,"%5.1f",256.0*(phase/twopi));
+        mvprintw(18+bshift,37,"%s",ephem);
+
+        if (sat_sun_status)
+        {
+            if (sun_ele<=-12.0 && sat_ele>=0.0)
+            {
+                body.visibility='V';
+            }
+            else
+            {
+                body.visibility='D';
+            }
+        }
+
+        else
+        {
+            body.visibility='N';
+        }
+
+        visibility=body.visibility;
+
+        if (comsat)
+        {
+            if (downlink!=0.0)
+            {
+                mvprintw(13,11,"%11.5f MHz",downlink);
+            }
+
+            else
+            {
+                mvprintw(13,11,"               ");
+            }
+
+            if (uplink!=0.0)
+            {
+                mvprintw(12,11,"%11.5f MHz",uplink);
+            }
+
+            else
+            {
+                mvprintw(12,11,"               ");
+            }
+        }
+
+        if (antfd!=-1)
+        {
+            if (sat_ele>=0.0)
+            {
+                mvprintw(18+bshift,67,"   Active   ");
+            }
+            else
+            {
+                mvprintw(18+bshift,67,"Standing  By");
+            }
+        }
+        else
+        {
+            mvprintw(18+bshift,67,"Not  Enabled");
+        }
+
+        if (calc_squint)
+        {
+            mvprintw(18+bshift,52,"%+6.2f",squint);
+        }
+        else
+        {
+            mvprintw(18+bshift,54,"N/A");
+        }
+
+        doppler100=-100.0e06*((sat_range_rate*1000.0)/299792458.0);
+        delay=1000.0*((1000.0*sat_range)/299792458.0);
+
+        if (sat_ele>=0.0)
+        {
+            if (aos_alarm==0)
+            {
+                beep();
+                aos_alarm=1;
+            }
+
+            if (comsat)
+            {
+                attrset(COLOR_PAIR(4)|A_BOLD);
+
+                if (fabs(sat_range_rate)<0.1)
+                {
+                    mvprintw(14,34,"    TCA    ");
+                }
+
+                else
+                {
+                    if (sat_range_rate<0.0)
+                    {
+                        mvprintw(14,34,"Approaching");
+                    }
+
+                    if (sat_range_rate>0.0)
+                    {
+                        mvprintw(14,34,"  Receding ");
+                    }
+                }
+
+                attrset(COLOR_PAIR(2)|A_BOLD);
+
+                if (downlink!=0.0)
+                {
+                    dopp=1.0e-08*(doppler100*downlink);
+                    mvprintw(13,32,"%11.5f MHz",downlink+dopp);
+                    loss=32.4+(20.0*log10(downlink))+(20.0*log10(sat_range));
+                    mvprintw(13,67,"%7.3f dB",loss);
+                    mvprintw(14,13,"%7.3f   ms",delay);
+                }
+
+                else
+                {
+                    mvprintw(13,32,"                ");
+                    mvprintw(13,67,"          ");
+                    mvprintw(14,13,"            ");
+                }
+
+                if (uplink!=0.0)
+                {
+                    dopp=1.0e-08*(doppler100*uplink);
+                    mvprintw(12,32,"%11.5f MHz",uplink-dopp);
+                    loss=32.4+(20.0*log10(uplink))+(20.0*log10(sat_range));
+                    mvprintw(12,67,"%7.3f dB",loss);
+                }
+
+                else
+                {
+                    mvprintw(12,32,"                ");
+                    mvprintw(12,67,"          ");
+                }
+
+                if (uplink!=0.0 && downlink!=0.0)
+                {
+                    mvprintw(14,67,"%7.3f ms",2.0*delay);
+                }
+
+                else
+                {
+                    mvprintw(14,67,"              ");
+                }
+            }
+
+        }
+
+        else
+        {
+            lostime=0.0;
+            aos_alarm=0;
+            los_alarm=0;
+            eclipse_alarm=0;
+
+            if (comsat)
+            {
+                mvprintw(12,32,"                ");
+                mvprintw(12,67,"          ");
+                mvprintw(13,32,"                ");
+                mvprintw(13,67,"          ");
+                mvprintw(14,13,"            ");
+                mvprintw(14,34,"           ");
+                mvprintw(14,67,"          ");
+            }
+        }
+
+        mvprintw(7+tshift,42,"%0.f ",fm);
+        mvprintw(8+tshift,42,"%0.f ",fk);
+
+        attrset(COLOR_PAIR(3)|A_BOLD);
+
+        mvprintw(21,22,"Orbit Number: %ld",rv);
+
+        /* Send data to serial port antenna tracker
+           either as needed (when it changes), or
+           once per second. */
+
+        if (sat_ele>=0.0 && antfd!=-1)
+        {
+            newtime=CurrentTime();
+
+            if ((oldel!=iel || oldaz!=iaz) || (once_per_second && newtime>lasttime))
+            {
+                TrackDataOut(antfd,(float)iel,(float)iaz);
+                oldel=iel;
+                oldaz=iaz;
+                lasttime=newtime;
+            }
+        }
+
+        mvprintw(23,22,"Spacecraft is currently ");
+
+        if (visibility=='V')
+        {
+            mvprintw(23,46,"visible    ");
+        }
+
+        if (visibility=='D')
+        {
+            mvprintw(23,46,"in sunlight");
+        }
+
+        if (visibility=='N')
+        {
+            mvprintw(23,46,"in eclipse ");
+        }
+
+        attrset(COLOR_PAIR(4)|A_BOLD);
+        mvprintw(20,5,"   Sun   ");
+        mvprintw(21,5,"---------");
+        attrset(COLOR_PAIR(3)|A_BOLD);
+        mvprintw(22,5,"%-7.2fAz",sun_azi);
+        mvprintw(23,4,"%+-6.2f  El",sun_ele);
+
+        FindMoon(daynum);
+
+        attrset(COLOR_PAIR(4)|A_BOLD);
+        mvprintw(20,65,"  Moon  ");
+        mvprintw(21,65,"---------");
+        attrset(COLOR_PAIR(3)|A_BOLD);
+        mvprintw(22,65,"%-7.2fAz",moon_az);
+        mvprintw(23,64,"%+-6.2f  El",moon_el);
+
+        if (geostationary==1 && sat_ele>=0.0)
+        {
+            mvprintw(22,22,"Satellite orbit is geostationary");
+            aoslos=-3651.0;
+        }
+
+        if (geostationary==1 && sat_ele<0.0)
+        {
+            mvprintw(22,22,"This satellite never reaches AOS");
+            aoslos=-3651.0;
+        }
+
+        if (aoshappens==0 || decayed==1)
+        {
+            mvprintw(22,22,"This satellite never reaches AOS");
+            aoslos=-3651.0;
+        }
+
+        if (sat_ele>=0.0 && geostationary==0 && decayed==0 && daynum>lostime)
+        {
+            lostime=FindLOS2();
+            mvprintw(22,22,"LOS at: %s UTC  ",Daynum2String(lostime));
+            aoslos=lostime;
+        }
+
+        else if (sat_ele<0.0 && geostationary==0 && decayed==0 && aoshappens==1 && daynum>aoslos)
+        {
+            daynum+=0.003;  /* Move ahead slightly... */
+            nextaos=FindAOS();
+            mvprintw(22,22,"Next AOS: %s UTC",Daynum2String(nextaos));
+            aoslos=nextaos;
+        }
+
+        /* This is where the variables for the socket server are updated. */
+
+        if (socket_flag)
+        {
+            body.az=sat_azi;
+            body.el=sat_ele;
+            body.lat=sat_lat;
+            body.lon=360.0-sat_lon;
+            body.footprint=fk;
+            body.range=sat_range;
+            body.altitude=sat_alt;
+            body.velocity=sat_vel;
+            body.orbitnum=rv;
+            body.doppler=doppler100;
+            body.nextevent=aoslos;
+            body.eclipse_depth=eclipse_depth/deg2rad;
+            body.phase=360.0*(phase/twopi);
+
+            if (calc_squint)
+            {
+                body.squint=squint;
+            }
+            else
+            {
+                body.squint=360.0;
+            }
+
+            FindSun(daynum);
+
+            sprintf(tracking_mode, "%s\n%c",sat.name,0);
+        }
+
+        /* Get input from keyboard */
+
+        ans=tolower(getch());
+
+        if (ans=='t')
+        {
+            oldtime=0.0;
+        }
+
+        /* If we receive a RELOAD_TLE command through the
+           socket connection or an 'r' through the keyboard,
+           reload the TLE file.  */
+
+        if (reload_tle || ans=='r')
+        {
+            ReadDataFiles();
+            reload_tle=0;
+        }
+
+        if (comsat)
+        {
+            if (ans==' ' && sat_db.transponders>1)
+            {
+                xponder++;
+
+                if (xponder>=sat_db.transponders)
+                {
+                    xponder=0;
+                }
+
+                move(10,1);
+                clrtoeol();
+
+                downlink_start=sat_db.downlink_start[xponder];
+                downlink_end=sat_db.downlink_end[xponder];
+                uplink_start=sat_db.uplink_start[xponder];
+                uplink_end=sat_db.uplink_end[xponder];
+
+                if (downlink_start>downlink_end)
+                {
+                    polarity=-1;
+                }
+
+                if (downlink_start<downlink_end)
+                {
+                    polarity=1;
+                }
+
+                if (downlink_start==downlink_end)
+                {
+                    polarity=0;
+                }
+
+                downlink=0.5*(downlink_start+downlink_end);
+                uplink=0.5*(uplink_start+uplink_end);
+            }
+
+            if (ans=='>' || ans=='.')
+            {
+                if (ans=='>')
+                {
+                    shift=0.001;  /* 1 kHz */
+                }
+                else
+                {
+                    shift=0.0001; /* 100 Hz */
+                }
+
+                /* Raise uplink frequency */
+
+                uplink+=shift*(double)abs(polarity);
+                downlink=downlink+(shift*(double)polarity);
+
+                if (uplink>uplink_end)
+                {
+                    uplink=uplink_start;
+                    downlink=downlink_start;
+                }
+            }
+
+            if (ans=='<' || ans== ',')
+            {
+                if (ans=='<')
+                {
+                    shift=0.001;  /* 1 kHz */
+                }
+                else
+                {
+                    shift=0.0001; /* 100 Hz */
+                }
+
+                /* Lower uplink frequency */
+
+                uplink-=shift*(double)abs(polarity);
+                downlink=downlink-(shift*(double)polarity);
+
+                if (uplink<uplink_start)
+                {
+                    uplink=uplink_end;
+                    downlink=downlink_end;
+                }
+            }
+
+            length=strlen(sat_db.transponder_name[xponder])/2;
+            mvprintw(10,40-length,"%s",sat_db.transponder_name[xponder]);
+        }
+
+        refresh();
+
+        halfdelay(2);
+
+    } while (ans!='q' && ans!=27);
+
+    cbreak();
+    sprintf(tracking_mode, "NONE\n%c",0);
+}
+
 void SingleTrack(int x)
 {
 	/* This function tracks a single satellite in real-time
