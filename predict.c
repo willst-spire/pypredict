@@ -3387,8 +3387,8 @@ char load(PyObject *args)
 	double epoch;
 	const char *tle0, *tle1, *tle2;
 
-	if (!PyArg_ParseTuple(args, "d(sss)|(ddi)",
-		&epoch, &tle0, &tle1, &tle2, &qth.stnlat, &qth.stnlong, &qth.stnalt))
+	if (!PyArg_ParseTuple(args, "(sss)|d(ddi)",
+		&tle0, &tle1, &tle2, &epoch, &qth.stnlat, &qth.stnlong, &qth.stnalt))
 	{
 		printf("Failure to parse arguments\n");
 		fflush(stdout);
@@ -3402,6 +3402,16 @@ char load(PyObject *args)
 		fflush(stdout);
 		//TODO: Throw exception
 		return -1;
+	}
+
+	// If time isn't set, use current time.
+	if (PyObject_Length(args) < 2)
+	{
+		daynum=CurrentDaynum();
+	}
+	else
+	{
+		daynum=((epoch/86400.0)-3651.0);
 	}
 
 	// If we haven't already set groundstation location, use predict's default.
@@ -3430,8 +3440,6 @@ char load(PyObject *args)
 	obs_geodetic.lon=-qth.stnlong*deg2rad;
 	obs_geodetic.alt=((double)qth.stnalt)/1000.0;
 	obs_geodetic.theta=0.0;
-
-	daynum=((epoch/86400.0)-3651.0);
 
 	return 0;
 }
