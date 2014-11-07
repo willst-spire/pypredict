@@ -3436,7 +3436,7 @@ char load(PyObject *args)
 	return 0;
 }
 
-static PyObject* observe(PyObject* self, PyObject *args)
+static PyObject* quick_find(PyObject* self, PyObject *args)
 {
 	struct observation obs = { 0 };
 
@@ -3450,11 +3450,103 @@ static PyObject* observe(PyObject* self, PyObject *args)
 	return PythonifyObservation(&obs);
 }
 
-static char observe_docs[] =
-    "observe(long, (tle_line0, tle_line1, tle_line2), (gs_lat, gs_lon, gs_alt))\n";
+static char quick_find_docs[] =
+    "quick_find(long, (tle_line0, tle_line1, tle_line2), (gs_lat, gs_lon, gs_alt))\n";
+
+static PyObject* quick_predict(PyObject* self, PyObject *args)
+{
+	double now;
+	int lastel=0;
+	observation obs = { 0 };
+	PyObject* transit = PyList_New(0);
+
+	now=CurrentDaynum();
+
+	if (load(args) != 0)
+	{
+		// load will set the appropriate exception if it fails.
+		return NULL;
+	}
+
+	//TODO: Seems like this should be based on the freshness of the TLE, not wall clock.
+	if ((daynum<now-365.0) || (daynum>now+365.0))
+	{
+		printf("Start must be within one year of current date.\n");
+		//TODO: Throw exception
+		fflush(stdout);
+		return NULL;
+	}
+
+	PreCalc(0);
+	Calc();
+	MakeObservation(daynum, &obs);
+
+	if (!AosHappens(0))
+	{
+		fprintf(stderr, "No AOS.  This satellite does not rise above horizon.\n");
+		//TODO: Throw exception
+		return NULL;
+	}
+
+	if (Geostationary(0)!=0)
+	{
+		fprintf(stderr, "Cannot calculate passes for geostationary satellites.\n");
+		//TODO: Throw exception
+		return NULL;
+	}
+
+	if (Decayed(indx,daynum)!=0)
+	{
+		fprintf(stderr, "Satellite has decayed.  Cannot calculate transit.\n");
+		//TODO: Throw exception
+		return NULL;
+	}
+
+	/* Make Predictions */
+	daynum=FindAOS();
+	
+	//TODO: Research reference counting practices
+	if (transit == NULL)
+	{
+		printf("Failed to create list\n");
+		return NULL;
+	}
+
+	/* Construct the pass */
+	while (iel>=0)
+	{
+		MakeObservation(daynum, &obs);
+		if (PyList_Append(transit, PythonifyObservation(&obs)) != 0)
+		{
+			printf("Failed to append observation to list\n");
+			return NULL;
+		}
+		lastel=iel;
+		daynum+=cos((sat_ele-1.0)*deg2rad)*sqrt(sat_alt)/25000.0;
+		Calc();
+	}
+
+	if (lastel!=0)
+	{
+		daynum=FindLOS();
+		MakeObservation(daynum, &obs);
+		if (PyList_Append(transit, PythonifyObservation(&obs)) != 0)
+		{
+			printf("Failed to append observation to list\n");
+			return NULL;
+		}
+	}
+
+	return transit;
+}
+
+static char quick_predict_docs[] =
+    "quick_predict(long, (tle_line0, tle_line1, tle_line2), (gs_lat, gs_lon, gs_alt))\n";
+
 
 static PyMethodDef pypredict_funcs[] = {
-    {"observe"  , (PyCFunction)observe  , METH_VARARGS, observe_docs},
+    {"quick_find"   , (PyCFunction)quick_find   , METH_VARARGS, quick_find},
+    {"quick_predict", (PyCFunction)quick_predict, METH_VARARGS, quick_predict_docs},
     {NULL, NULL, 0, NULL} 
 };
 
