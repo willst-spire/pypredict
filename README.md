@@ -8,44 +8,51 @@ We aim for result-parity and it should produce identical values on the same inpu
 
 If you think you've found an error, please include predict's differing output in the bug report.
 If you think you've found a bug in predict, please report and we'll coordinate with upstream.
-
-## Dependencies
+### Installation
 ```
 sudo apt-get install python-dev
-```
-
-## Installation
-```
 sudo python setup.py install
 ```
 ## Usage
+PyPredict provides a convenient API for exposing exposes underlying functionality as well as providing a slightly convenient API.
+#### Convenience API
 ```
-# Outputs the location of the satellite and related parameters
-predict.quick_find(tle, epoch, qth)
-# \_ tle - array of strings (lines 0,1,2 of TLE)
-# \_ epoch - (optional, defaults: now) number of seconds since epoch (as float)
-# \_ qth - (optional, defaults: system) tuple of (lat(N), long(W), alt(m)) (float, float, int)
-
-# Outputs the next pass of the satellite over the groundstation (throws exception if no pass)
-predict.quick_predict(tle, epoch, qth)
-# \_ tle - array of strings (lines 0,1,2 of TLE)
-# \_ epoch - (optional, defaults: now) number of seconds since epoch (as float)
-# \_ qth - (optional, defaults: system) tuple of (lat(N), long(W), alt(m)) (float, float, int)
-
-```
-## Example
-```
-import time
-import urllib2
 import predict
-
-# Get a TLE
-res = urllib2.urlopen("http://tle.nanosatisfi.com/%d" % 40044)
-if res.getcode() != 200:
-    raise Exception("Unable to retrieve TLE from tle.nanosatisfi.com. HTTP code(%s)", res.getcode())
-tle = res.read().rstrip()
-
+tle = predict.tle(40044)
+o = predict.Observer(tle)
+print o.observe()
+p = o.passes()
+for i in range(1,10):
+	np = p.next()
+	print("%f\t%f\t%f" % (np.start_time(), np.duration(), np.max_elevation()))
+```
+#### C Implementation
+```
 predict.quick_find(tle.split('\n'), time.time(), (37.7727, 122.407, 25))
-
 predict.quick_predict(tle.split('\n'), time.time(), (37.7727, 122.407, 25))
 ```
+##API
+**`quick_find`**(_tle[, time[, qth]]_)  
+&nbsp;&nbsp;&nbsp;&nbsp;_time_ defaults to now  
+&nbsp;&nbsp;&nbsp;&nbsp;_qth_ defaults to latitude, longitude, altitude stored in ~/.predict/predict.qth
+
+**`quick_predict`**(_tle[, time[, qth]]_)
+
+**`tle`**(*norad_id*)
+
+**`Observer`**(_tle[, qth]_)
+
+&nbsp;&nbsp;&nbsp;&nbsp;**`observe`**(_[time]_)
+
+&nbsp;&nbsp;&nbsp;&nbsp;**`passes`**(_[time]_)
+
+**`PassGenerator`**(_tle[, time[, qth]]_)
+
+**`Transit`**(_points_)
+
+&nbsp;&nbsp;&nbsp;&nbsp;**`start_time`**()
+
+&nbsp;&nbsp;&nbsp;&nbsp;**`duration`**()
+
+&nbsp;&nbsp;&nbsp;&nbsp;**`max_elevation`**()
+
