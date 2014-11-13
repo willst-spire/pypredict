@@ -28,6 +28,7 @@ class Observer():
 		else:
 			return PassGenerator(self.tle, at)
 
+# Transit is a thin wrapper around the array of dictionaries returned by cpredict.quick_predict
 class Transit():
 	def __init__(self, observations):
 		self.points = observations
