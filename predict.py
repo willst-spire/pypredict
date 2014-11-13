@@ -2,7 +2,7 @@ import time
 import urllib2
 from datetime import datetime
 
-# Pickup quick_predict and quick_find from c extension and expose them.
+# Pythonic?  Pickup quick_predict and quick_find from c extension and expose them.
 from cpredict import *
 
 def tle(norad_id):
@@ -35,8 +35,8 @@ class Transit():
 	def start_time(self):
 		return self.points[0]['epoch']
 
-	def duration(self):
-		return self.points[-1]['epoch'] - self.start_time()
+	def end_time(self):
+		return self.points[-1]['epoch']
 
 	# TODO: Verify quick_predict returns observation at peak of transit
 	def max_elevation(self):

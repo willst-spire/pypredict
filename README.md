@@ -24,7 +24,7 @@ print o.observe()
 p = o.passes()
 for i in range(1,10):
 	np = p.next()
-	print("%f\t%f\t%f" % (np.start_time(), np.duration(), np.max_elevation()))
+	print("%f\t%f\t%f" % (np.start_time(), np.end_time() - np.start_time(), np.max_elevation()))
 ```
 #### C Implementation
 ```
@@ -52,7 +52,7 @@ predict.quick_predict(tle.split('\n'), time.time(), (37.7727, 122.407, 25))
 
 &nbsp;&nbsp;&nbsp;&nbsp;**`start_time`**()
 
-&nbsp;&nbsp;&nbsp;&nbsp;**`duration`**()
+&nbsp;&nbsp;&nbsp;&nbsp;**`end_time`**()
 
 &nbsp;&nbsp;&nbsp;&nbsp;**`max_elevation`**()
 
