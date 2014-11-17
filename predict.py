@@ -20,18 +20,18 @@ class Observer():
         else:
             return quick_find(self.tle, at)
 
-	# Returns a generator of passes occuring between start_time and end_time
-	def passes(self, start_time = time.time(), end_time = None):
-		crs = start_time
-		while True:
-			p = Transit(quick_predict(*filter(None, [self.tle, crs, self.qth])))
-			if (p.start_time() < start_time):
-				continue
-			yield p
-			if (end_time and p.end_time() > end_time):
-				break
-			# Need to advance time cursor sufficiently far so predict doesn't yield same pass
-			crs = p.end_time() + 60 #seconds seems to be sufficient
+    # Returns a generator of passes occuring between start_time and end_time
+    def passes(self, start_time = time.time(), end_time = None):
+        crs = start_time
+        while True:
+            p = Transit(quick_predict(*filter(None, [self.tle, crs, self.qth])))
+            if (p.start_time() < start_time):
+                continue
+            yield p
+            if (end_time and p.end_time() > end_time):
+                break
+            # Need to advance time cursor sufficiently far so predict doesn't yield same pass
+            crs = p.end_time() + 60 #seconds seems to be sufficient
 
 # Transit is a thin wrapper around the array of dictionaries returned by cpredict.quick_predict
 class Transit():
@@ -51,5 +51,5 @@ class Transit():
     def __getitem__(self, key):
         return self.points[key]
 
-	def __str__(self):
-		return "Transit(from: %s to: %s, max elevation: %s)" % (self.start_time(), self.end_time(), self.max_elevation())
+    def __str__(self):
+        return "Transit(from: %s to: %s, max elevation: %s)" % (self.start_time(), self.end_time(), self.max_elevation())
