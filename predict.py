@@ -24,14 +24,16 @@ class Observer():
         self.qth = (float(qth[0]), float(qth[1]), int(qth[2]))
         self.name = qth[3] if len(qth) >= 4 else None
         
-    def observe(self, at = time.time()):
+    def observe(self, at = None):
+        at = at or time.time()
         if self.qth:
             return quick_find(self.tle, at, self.qth)
         else:
             return quick_find(self.tle, at)
 
     # Returns a generator of passes occuring entirely between 'after' and 'before' (epoch)
-    def passes(self, after=time.time(), before=None):
+    def passes(self, after=None, before=None):
+        after = after or time.time()
         crs = after
         while True:
             p = quick_predict(self.tle, crs, self.qth)
