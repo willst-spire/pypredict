@@ -25,19 +25,18 @@ class Observer():
         self.name = qth[3] if len(qth) >= 4 else None
         
     def observe(self, at = None):
-        at = at or time.time()
-        if self.qth:
-            return quick_find(self.tle, at, self.qth)
-        else:
-            return quick_find(self.tle, at)
+        at = at if at != None else time.time()
+        return quick_find(self.tle, at)
 
     # Returns a generator of passes occuring entirely between 'after' and 'before' (epoch)
     def passes(self, after=None, before=None):
-        after = after or time.time()
+        at = at if at != None else time.time()
         crs = after
         while True:
             p = quick_predict(self.tle, crs, self.qth)
-            t = Transit(self, p[0]['epoch'], p[-1]['epoch'])
+            start = p[0]['epoch']
+            end = p[-1]['epoch']
+            t = Transit(self, start, end)
             if (t.start < after):
                 continue
             if (before and before < t.end):
@@ -46,7 +45,7 @@ class Observer():
             # Need to advance time cursor sufficiently far so predict doesn't yield same pass
             crs = p.end_time() + 60 #seconds seems to be sufficient
 
-# Transit is a thin wrapper around the array of dictionaries returned by cpredict.quick_predict
+# Transit is a convenience class representing a pass of a satellite over a groundstation
 class Transit():
     def __init__(self, observer, start, end):
         self.observer = observer
@@ -59,10 +58,9 @@ class Transit():
     def groundstation(self):
         return self.observer.name or self.observer.qth
 
-    # TODO: Verify quick_predict returns observation at peak of transit
     def max_elevation(self):
-        # TODO: Implement (binary search? Set at initialization time?)
-        return None
+        #TODO: Optimize (or at least cache) this.  Also, sub-second granularity?
+        return max([self.observer.observe(t)['elevation'] for t in range(self.start, self.end)])
 
     def at(timestamp):
         # TODO: Throw exception if out of start, end bounds?
