@@ -1,7 +1,8 @@
 import time
 import urllib2
-from datetime import datetime
 from os import path
+from math import ceil, floor
+from datetime import datetime
 from cpredict import quick_find, quick_predict
 
 def tle(norad_id):
@@ -30,26 +31,31 @@ class Observer():
 
     # Returns a generator of passes occuring entirely between 'after' and 'before' (epoch)
     def passes(self, after=None, before=None):
-        at = at if at != None else time.time()
+        after = after if after != None else time.time()
         crs = after
+        prev_transit_end = None
         while True:
-            p = quick_predict(self.tle, crs, self.qth)
-            start = p[0]['epoch']
-            end = p[-1]['epoch']
-            t = Transit(self, start, end)
-            if (t.start < after):
+            transit = quick_predict(self.tle, crs, self.qth)
+            start = transit[0]['epoch']
+            end = transit[-1]['epoch']
+            peak = max(transit, key=lambda t:t['elevation'])['elevation']
+            t = Transit(self, start, end, peak)
+            if (t.start < prev_transit_end):    # None is lower than any integer
+                # HACK: predict doesn't reliably yield a new pass if the start time
+                #       is 'too' close to the end of the previous pass.
+                crs += 1
                 continue
-            if (before and before < t.end):
-                break
-            yield t
-            # Need to advance time cursor sufficiently far so predict doesn't yield same pass
-            crs = p.end_time() + 60 #seconds seems to be sufficient
+            if (t.start > after):
+                yield t
+            prev_transit_end = t.end
+            crs = t.end+1     # Advance the cursor past the end of the calculated transit
 
 # Transit is a convenience class representing a pass of a satellite over a groundstation
 class Transit():
-    def __init__(self, observer, start, end):
+    def __init__(self, observer, start, end, peak):
         self.observer = observer
         self.start = start
+        self.peak = peak
         self.end = end
 
     def satellite(self):
@@ -60,11 +66,11 @@ class Transit():
 
     def max_elevation(self):
         #TODO: Optimize (or at least cache) this.  Also, sub-second granularity?
-        return max([self.observer.observe(t)['elevation'] for t in range(self.start, self.end)])
+        return max([self.observer.observe(t)['elevation'] for t in range(int(self.start), int(ceil(self.end)))])
 
     def at(timestamp):
         # TODO: Throw exception if out of start, end bounds?
         return self.observer.observe(timestamp)
 
     def __str__(self):
-        return "Transit(%s, %s, %s)" % (self.start, self.end, self.max_elevation())
+        return "Transit(%s, %s, %s, %s)" % (self.start, self.end, self.max_elevation(), self.peak)
