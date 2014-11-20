@@ -10,45 +10,37 @@ def tle(norad_id):
         raise urllib2.HTTPError("Unable to retrieve TLE from tle.nanosatisfi.com. HTTP code(%s)" % res.getcode())
     return res.read().rstrip()
 
-def qth(pot=path.expanduser("~/.predict/predict.qth")):
-    if isinstance(pot, basestring):
-        assert path.isfile(pot), "qth file '%s' does not exist or is not readable." % pot
-        pot = [l.strip() for l in open(pot).readlines()]
-        assert len(pot) == 4, "qth file '%s' must contain exactly 4 lines (name, lat, long, alt)" % pot
-        pot = pot[1:]+pot[:1] # move name last
-
-    # Validate and attempt necessary type conversions
-    assert 3 <= len(pot) <= 4, "qth must follow (lat, long, alt[, name])"
-    qth = (float(pot[0]), float(pot[1]), int(pot[2]))
-    if len(pot) == 4:
-        qth = qth + (str(pot[3]),)
-
-    return qth
-
 class Observer():
-    def __init__(self, tle, qth=None:
-        self.tle = tle.rstrip().split('\n')
-        if qth == None:
-            default =
-            qth = [l.strip() for l in open(pot).readlines()]
-
-
+    def __init__(self, tle, qth="~/.predict/predict.qth"):
+        ## ETL tle and qth data
+        self.tle = tle.rstrip().split('\n') if isinstance(tle, basestring) else tle
+        if isinstance(qth, basestring):
+            raw = open(path.expanduser(qth)).readlines()
+            lines = [l.strip() for l in raw]
+            assert len(lines) == 4, "qth file '%s' must contain exactly 4 lines (name, lat, long, alt)" % qth
+            qth = lines[1:]+lines[:1] # move name last
+        assert 3 <= len(qth) <= 4, "qth must follow (lat, long, alt[, name])"
+        # Attempt conversion to format required for predict.quick_find
+        self.qth = (float(qth[0]), float(qth[1]), int(qth[2]))
+        self.name = qth[3] if len(qth) >= 4 else None
+        
     def observe(self, at = time.time()):
         if self.qth:
             return quick_find(self.tle, at, self.qth)
         else:
             return quick_find(self.tle, at)
 
-    # Returns a generator of passes occuring entirely between 'after' and 'before' epoch times
+    # Returns a generator of passes occuring entirely between 'after' and 'before' (epoch)
     def passes(self, after=time.time(), before=None):
         crs = after
         while True:
-            p = Transit(quick_predict(*filter(None, [self.tle, crs, self.qth])))
-            if (p.start_time() < after):
+            p = quick_predict(self.tle, crs, self.qth)
+            t = Transit(self, p[0]['epoch'], p[-1]['epoch'])
+            if (t.start < after):
                 continue
-            if (before and before < p.end_time()):
+            if (before and before < t.end):
                 break
-            yield p
+            yield t
             # Need to advance time cursor sufficiently far so predict doesn't yield same pass
             crs = p.end_time() + 60 #seconds seems to be sufficient
 
@@ -56,23 +48,23 @@ class Observer():
 class Transit():
     def __init__(self, observer, start, end):
         self.observer = observer
-        
+        self.start = start
+        self.end = end
 
-    def start_time(self):
-        return self.points[0]['epoch']
+    def satellite(self):
+        return self.observer.tle[0]
 
-    def end_time(self):
-        return self.points[-1]['epoch']
+    def groundstation(self):
+        return self.observer.name or self.observer.qth
 
     # TODO: Verify quick_predict returns observation at peak of transit
     def max_elevation(self):
-        return max([p['elevation'] for p in self.points])
+        # TODO: Implement (binary search? Set at initialization time?)
+        return None
 
-    def position(ts):
-        return self.calculator(ts)
-
-    def __getitem__(self, key):
-        return self.points[key]
+    def at(timestamp):
+        # TODO: Throw exception if out of start, end bounds?
+        return self.observer.observe(timestamp)
 
     def __str__(self):
-        return "Transit(%s, %s, %s)" % (self.start_time(), self.end_time(), self.max_elevation())
+        return "Transit(%s, %s, %s)" % (self.start, self.end, self.max_elevation())
