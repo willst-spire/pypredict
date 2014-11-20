@@ -20,57 +20,60 @@ class Observer():
             lines = [l.strip() for l in raw]
             assert len(lines) == 4, "qth file '%s' must contain exactly 4 lines (name, lat, long, alt)" % qth
             qth = lines[1:]+lines[:1] # move name last
-        assert 3 <= len(qth) <= 4, "qth must follow (lat, long, alt[, name])"
         # Attempt conversion to format required for predict.quick_find
+        assert 3 <= len(qth) <= 4, "qth must follow (lat, long, alt[, name])"
         self.qth = (float(qth[0]), float(qth[1]), int(qth[2]))
-        self.name = qth[3] if len(qth) >= 4 else None
-        
+        if len(qth) == 4:
+            self.qth = self.qth + (str(qth[3]),)
+
     def observe(self, at = None):
         at = at if at != None else time.time()
-        return quick_find(self.tle, at)
+        return quick_find(self.tle, at, self.qth[0:3])
 
     # Returns a generator of passes occuring entirely between 'after' and 'before' (epoch)
     def passes(self, after=None, before=None):
         after = after if after != None else time.time()
         crs = after
-        prev_transit_end = None
         while True:
-            transit = quick_predict(self.tle, crs, self.qth)
+            transit = quick_predict(self.tle, crs, self.qth[0:3])
             start = transit[0]['epoch']
             end = transit[-1]['epoch']
-            peak = max(transit, key=lambda t:t['elevation'])['elevation']
-            t = Transit(self, start, end, peak)
-            if (t.start < prev_transit_end):    # None is lower than any integer
-                # HACK: predict doesn't reliably yield a new pass if the start time
-                #       is 'too' close to the end of the previous pass.
-                crs += 1
-                continue
+            t = Transit(self.tle, self.qth, start, end) # un/repacking for convenient external API
+            if (before != None and before < t.end):
+                break
             if (t.start > after):
                 yield t
-            prev_transit_end = t.end
-            crs = t.end+1     # Advance the cursor past the end of the calculated transit
+            # Need to advance time cursor sufficiently far so predict doesn't yield same pass
+            crs = t.end + 60     #seconds seems to be sufficient
 
 # Transit is a convenience class representing a pass of a satellite over a groundstation
 class Transit():
-    def __init__(self, observer, start, end, peak):
-        self.observer = observer
+    def __init__(self, tle, qth, start, end):
+        self.observer = Observer(tle, qth)
         self.start = start
-        self.peak = peak
         self.end = end
 
     def satellite(self):
         return self.observer.tle[0]
 
+    # Return the callsign/hostname of the groundstation, if present.
     def groundstation(self):
-        return self.observer.name or self.observer.qth
+        qth = self.observer.qth
+        return qth[3] if len(qth) == 4 else qth[0:3]
 
     def max_elevation(self):
         #TODO: Optimize (or at least cache) this.  Also, sub-second granularity?
         return max([self.observer.observe(t)['elevation'] for t in range(int(self.start), int(ceil(self.end)))])
 
-    def at(timestamp):
+    def duration(self):
+        return self.end - self.start
+
+    def at(self, timestamp):
         # TODO: Throw exception if out of start, end bounds?
         return self.observer.observe(timestamp)
 
+    def __repr__(self):
+        return "Transit%s"%(self.tle, self.qth, self.start, self.end).__repr__()
+
     def __str__(self):
-        return "Transit(%s, %s, %s, %s)" % (self.start, self.end, self.max_elevation(), self.peak)
+        return str((self.start, self.end, self.max_elevation(), self.duration()))
