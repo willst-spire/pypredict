@@ -107,10 +107,3 @@ predict.quick_predict(tle.split('\n'), time.time(), (37.7727, 122.407, 25))
 <b>tle</b>(<i>norad_id</i>)  
         Fetch the TLE for the given NORAD id from the spire tle service.
 </pre>
-
-##Consumers
-gs-link-* flowgraphs: Realtime calculations of doppler shift for machine qth and passed norad_id.
-gs-track rotor controller: Realtime relative position (az, el) of named satellite over machine qth.
-passifier: computer an optimized schedule of contacts across all groundstations and satellites
-  gsoap-relay: For a known satellite, determine which groundstation to send a packet
-  gsoap-ground-control: For each groundstation, know when all the upcoming passes are so it can send gs-link and gs-track establishment messages

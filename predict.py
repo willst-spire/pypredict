@@ -1,7 +1,7 @@
 import time
 import urllib2
 from os import path
-from math import ceil, floor
+from math import ceil
 from datetime import datetime
 from cpredict import quick_find, quick_predict
 
