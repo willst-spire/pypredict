@@ -21,14 +21,12 @@ class Observer():
             assert len(lines) == 4, "qth file '%s' must contain exactly 4 lines (name, lat, long, alt)" % qth
             qth = lines[1:]+lines[:1] # move name last
         # Attempt conversion to format required for predict.quick_find
-        assert 3 <= len(qth) <= 4, "qth must follow (lat, long, alt[, name])"
+        assert len(qth) == 3, "qth must be (lat, long, alt) as (float, float, int)" 
         self.qth = (float(qth[0]), float(qth[1]), int(qth[2]))
-        if len(qth) == 4:
-            self.qth = self.qth + (str(qth[3]),)
 
     def observe(self, at = None):
         at = at if at != None else time.time()
-        return quick_find(self.tle, at, self.qth[0:3])
+        return quick_find(self.tle, at, self.qth)
 
     # Returns a generator of passes occuring entirely between 'after' and 'before' (epoch)
     def passes(self, after=None, before=None):
@@ -52,14 +50,11 @@ class Transit():
         self.observer = Observer(tle, qth)
         self.start = start
         self.end = end
+        self.qth = qth
 
+    # return the name of the satellite transiting
     def satellite(self):
         return self.observer.tle[0]
-
-    # Return the callsign/hostname of the groundstation, if present.
-    def groundstation(self):
-        qth = self.observer.qth
-        return qth[3] if len(qth) == 4 else qth[0:3]
 
     def max_elevation(self):
         #TODO: Optimize (or at least cache) this.  Also, sub-second granularity?
@@ -68,7 +63,7 @@ class Transit():
     def duration(self):
         return self.end - self.start
 
-    def at(self, timestamp):
+    def slant(self, timestamp):
         # TODO: Throw exception if out of start, end bounds?
         return self.observer.observe(timestamp)
 
