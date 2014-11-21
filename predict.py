@@ -11,6 +11,21 @@ def tle(norad_id):
         raise urllib2.HTTPError("Unable to retrieve TLE from tle.nanosatisfi.com. HTTP code(%s)" % res.getcode())
     return res.read().rstrip()
 
+# Thought: Get rid of the notion of transits, instead we just have observations (as if the planet wasn't in the way)
+# and you can ask an observation for the next observation given certain criteria: like observation.next('altitude > 0')
+# if you want to put transits together for visualizations or something that should live in the visualizer
+
+# Thought: Apparently in aerospace lingo 'altitude' and 'elevation' have the switched meanings as in astronomy
+# 'altitude' is how high above sea level and 'elevation' is how many degrees about the horizon something is
+
+# Thought: Maybe instead of thinking about this from the point of view of the Groundstation we think about it
+# from the point of view of the satellite (that's what we care about more anyway)
+# class Satellite:
+#   def observe(self, from="~/.predict/predict.qth", time=time.now())
+# observation = predict.Satellite.observe(time=time.now())
+# observation.next(step=10*60)
+# or maybe...
+
 class Observer():
     def __init__(self, tle, qth="~/.predict/predict.qth"):
         ## ETL tle and qth data
@@ -40,6 +55,7 @@ class Observer():
             if (before != None and before < t.end):
                 break
             if (t.start > after):
+                t.rawdata = transit
                 yield t
             # Need to advance time cursor sufficiently far so predict doesn't yield same pass
             crs = t.end + 60     #seconds seems to be sufficient
