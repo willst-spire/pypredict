@@ -47,6 +47,27 @@ def transits(tle, qth, ending_after=None, ending_before=None):
         # Need to advance time cursor so predict doesn't yield same pass
         ts = t.end + 60     #seconds seems to be sufficient
 
+# Return a value x that's within epsilon of the value that maximizes the concave
+# or strictly monotonic function fx over the interval [a,b]
+# Used primarily to find the peak of a transit
+def maximize_concave(f, start, end, epsilon=0.1):
+    x = float(start+end)/2
+    step = float(end-start)
+    while (step > epsilon):
+        step /= 4
+        direction = None
+        while True:
+            w = max(x - step, start)
+            y = min(x + step, end)
+            next_x = max((f(w), w), (f(y), y))[1]
+            if x == new_x:
+                break
+            # break if we've switched directions at this step size
+            if (direction is not None) and (direction * (new_x - x) < 0):
+                break
+            direction = new_x - x
+            x = new_x
+
 # Transit is a convenience class representing a pass of a satellite over a groundstation.
 class Transit():
     def __init__(self, tle, qth, start, end):
@@ -58,32 +79,7 @@ class Transit():
     # return observation within epsilon seconds of maximum elevation
     # NOTE: Assumes elevation is strictly monotonic or concave over the [start,end] interval
     def peak(self, epsilon=0.1):
-        ts =  (self.end + self.start)/2
-        step = (self.end - self.start)
-        while (step > epsilon):
-            step /= 4
-            # Ascend the gradient at this step size
-            direction = None
-            while True:
-                mid   = self.engine.observe(ts)['elevation']
-                left  = self.engine.observe(ts - step)['elevation']
-                right = self.engine.observe(ts + step)['elevation']
-                # Break if we're at a peak
-                if (left <= mid >= right):
-                    break
-                # Ascend up slope
-                slope = -1 if (left > right) else 1
-                # Break if we stepped over a peak (switched directions)
-                if direction is None:
-                    direction = slope
-                if direction != slope:
-                    break
-                # Break if stepping would take us outside of transit
-                next_ts = ts + (direction * step)
-                if (next_ts < self.start) or (next_ts > self.end):
-                    break
-                # Step towards the peak
-                ts = next_ts
+        ts = maximize_concave(lambda x: self.at(x)['elevation'], self.start, self.end, epsilon)
         return self.at(ts)
 
     def duration(self):
@@ -92,5 +88,5 @@ class Transit():
     def at(self, t):
         if t < self.start or t > self.end:
             raise PredictException("time %f outside transit [%f, %f]" % (t, self.start, self.end))
-        return self.engine.observe(t)
+        return observe(self.tle, self.qth, t)
         
