@@ -28,14 +28,24 @@ def observe(tle, qth, at=None):
         at = time.time()
     return quick_find(tle, at, qth)
 
+def foobar():
+    raise Exception("foobar")
+
 def transits(tle, qth, ending_after=None, ending_before=None):
     tle = massage_tle(tle)
     qth = massage_qth(qth)
     if ending_after is None:
         ending_after = time.time()
     ts = ending_after
+
     while True:
-        transit = quick_predict(tle, ts, qth)
+        # transit = quick_predict(tle, ts, qth)
+        # TODO - see `test_specific_error_case` in test.py
+        try:
+           transit = quick_predict(tle, ts, qth)
+        except PredictException:
+            # break
+            raise Exception("\n%s\n\n%s" % (transit[-2],transit[-1]))
         t = Transit(tle, qth, start=transit[0]['epoch'], end=transit[-1]['epoch'])
         if (ending_before != None and t.end > ending_before):
             break
