@@ -44,7 +44,7 @@ def transits(tle, qth, ending_after=None, ending_before=None):
         try:
            transit = quick_predict(tle, ts, qth)
         except PredictException:
-            #break
+            # break
             raise Exception("\n%s\n\n%s" % (transit[-2],transit[-1]))
         t = Transit(tle, qth, start=transit[0]['epoch'], end=transit[-1]['epoch'])
         if (ending_before != None and t.end > ending_before):
