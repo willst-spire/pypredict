@@ -3475,6 +3475,8 @@ static PyObject* quick_predict(PyObject* self, PyObject *args)
 	}
 
 	//TODO: Seems like this should be based on the freshness of the TLE, not wall clock.
+	//TODO: would be nice to include the current date and the date we're trying to calculate
+	//TODO: any reason we can't predict using dates and TLEs from the past?
 	if ((daynum<now-365.0) || (daynum>now+365.0))
 	{
 		PyErr_SetString(PredictException, "Start must be within one year of current date.\n");
