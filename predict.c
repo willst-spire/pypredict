@@ -2597,6 +2597,7 @@ double CurrentDaynum()
 	//TODO: Refactoring Hack (remove)
 	if (debug_freeze_time)
 	{
+		printf("frozen time\n\n");
 		time_t debug_frozen_time = mktime(&debug_frozen_tm);
 		return ((((double)debug_frozen_time)/86400.0) - 3651.0);
 	}
@@ -2606,6 +2607,7 @@ double CurrentDaynum()
 	double usecs, seconds;
 
 	x=gettimeofday(&tptr,NULL);
+	//printf("gettimeofday: %d %d\n", tptr.tv_sec, tptr.tv_usec);
 
 	usecs=0.000001*(double)tptr.tv_usec;
 	seconds=usecs+(double)tptr.tv_sec;
@@ -3191,8 +3193,10 @@ double FindAOS()
 double FindLOS()
 {
 	lostime=0.0;
-
-	if (Geostationary(indx)==0 && AosHappens(indx)==1 && Decayed(indx,daynum)==0)
+	printf("FindLOS: Geostationary(indx): %d\n", Geostationary(0));
+	printf("FindLOS: AosHappens(indx): %d\n", AosHappens(0));
+	printf("FindLOS: Decayed(indx,daynum): %d\n", Decayed(0,daynum));
+	if (Geostationary(0)==0 && AosHappens(0)==1 && Decayed(0,daynum)==0)
 	{
 		Calc();
 
@@ -3407,7 +3411,10 @@ char load(PyObject *args)
 	}
 	else
 	{
+		printf("epoch passed in as: %f\n", epoch);
+		printf("epoch/86400.0 = %f\n", epoch/86400.0);
 		daynum=((epoch/86400.0)-3651.0);
+		printf("daynum set to %f\n", daynum);
 	}
 
 	// If we haven't already set groundstation location, use predict's default.
@@ -3467,6 +3474,7 @@ static PyObject* quick_predict(PyObject* self, PyObject *args)
 		goto cleanup_and_raise_exception;
 	}
 
+	printf("quick_predict:CurrentDaynum\n");
 	now=CurrentDaynum();
 
 	if (load(args) != 0)
@@ -3475,6 +3483,7 @@ static PyObject* quick_predict(PyObject* self, PyObject *args)
 		goto cleanup_and_raise_exception;
 	}
 
+	printf("now: %f daynum: %f\n", now, daynum);
 	//TODO: Seems like this should be based on the freshness of the TLE, not wall clock.
 	if ((daynum<now-365.0) || (daynum>now+365.0))
 	{
@@ -3524,6 +3533,7 @@ static PyObject* quick_predict(PyObject* self, PyObject *args)
 			//MakeObservation will set appropriate exception string
 			goto cleanup_and_raise_exception;
 		}
+		printf("constructing transit: this observation at daynum: %f epoch: %f\n", daynum, obs.epoch);
 
 		py_obs = PythonifyObservation(&obs);
 		if (py_obs == NULL) {
@@ -3537,17 +3547,21 @@ static PyObject* quick_predict(PyObject* self, PyObject *args)
 		}
 		lastel=iel;
 		daynum+=cos((sat_ele-1.0)*deg2rad)*sqrt(sat_alt)/25000.0;
+		printf("advancing daynum to: %f\n", daynum);
 		Calc();
 	}
 
 	if (lastel!=0)
 	{
 		daynum=FindLOS();
+		printf("lastel(%d)!=0 so adding another point at daynum=%f\n", lastel, daynum);
+		Calc();
 
 		if (MakeObservation(daynum, &obs) != 0)
 		{
 			goto cleanup_and_raise_exception;
 		}
+		printf("constructing transit: this observation at daynum: %f epoch: %f\n", daynum, obs.epoch);
 
 		py_obs = PythonifyObservation(&obs);
 		if (py_obs == NULL) {
