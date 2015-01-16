@@ -3114,6 +3114,7 @@ char AosHappens(int x)
 
 char Decayed(int x, double time)
 {
+	printf("Decayed(%d, %f)\n", x, time);
 	/* This function returns a 1 if it appears that the
 	   satellite pointed to by 'x' has decayed at the
 	   time of 'time'.  If 'time' is 0.0, then the
@@ -3126,8 +3127,13 @@ char Decayed(int x, double time)
 		time=CurrentDaynum();
 	}
 
+	printf("Decayed(internal)(%d, %f) -> ", x, time);
+
 	satepoch=DayNum(1,0,sat.year)+sat.refepoch;
 
+	int decayed;
+	decayed = (satepoch+((16.666666-sat.meanmo)/(10.0*fabs(sat.drag))) < time);
+	printf("%d\n", decayed);
 	if (satepoch+((16.666666-sat.meanmo)/(10.0*fabs(sat.drag))) < time)
 	{
 		return 1;
@@ -3195,7 +3201,7 @@ double FindLOS()
 	lostime=0.0;
 	printf("FindLOS: Geostationary(indx): %d\n", Geostationary(0));
 	printf("FindLOS: AosHappens(indx): %d\n", AosHappens(0));
-	printf("FindLOS: Decayed(indx,daynum): %d\n", Decayed(0,daynum));
+	printf("FindLOS: Decayed(indx,%f): %d\n", daynum, Decayed(0,daynum));
 	if (Geostationary(0)==0 && AosHappens(0)==1 && Decayed(0,daynum)==0)
 	{
 		Calc();
@@ -3546,15 +3552,19 @@ static PyObject* quick_predict(PyObject* self, PyObject *args)
 			goto cleanup_and_raise_exception;
 		}
 		lastel=iel;
-		daynum+=cos((sat_ele-1.0)*deg2rad)*sqrt(sat_alt)/25000.0;
-		printf("advancing daynum to: %f\n", daynum);
-		Calc();
+		if (iel >= 0) {
+			daynum+=cos((sat_ele-1.0)*deg2rad)*sqrt(sat_alt)/25000.0;
+			printf("advancing daynum to: %f\n", daynum);
+			Calc();
+		}
 	}
 
 	if (lastel!=0)
 	{
-		daynum=FindLOS();
-		printf("lastel(%d)!=0 so adding another point at daynum=%f\n", lastel, daynum);
+		printf("lastel(%d)!=0 so adding another point via FindLOS at daynum%f\n", lastel, daynum);
+		daynum=FindLOS2();
+		printf("FindLOS2 returned %f\n", daynum);
+		
 		Calc();
 
 		if (MakeObservation(daynum, &obs) != 0)
