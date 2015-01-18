@@ -1,42 +1,47 @@
 import time
 from cpredict import quick_find, quick_predict, PredictException
 
-def massage_tle(tle):
+def load_tle(source):
     try:
-        # TLE may or may not have been split into lines already
-        if isinstance(tle, basestring):
-            tle = tle.rstrip().split('\n')
-        assert len(tle) == 3, "TLE must be 3 lines, not %d: %s" % (len(tle), tle)
-        return tle
+        if hasattr(source, 'tle'):
+            source = source.tle() if callable(source.tle) else source.tle
+        if isinstance(source, basestring):
+            source = source.rstrip().split('\n')
+        assert len(source) == 3, "TLE must be exactly 3 lines: %s" % source
+        return source
         #TODO: print a warning if TLE is 'too' old
     except Exception as e:
         raise PredictException(e)
 
-def massage_qth(qth):
+def load_qth(source):
     try:
-        assert len(qth) == 3, "%s must consist of exactly three elements: (lat(N), long(W), alt(m))" % qth
-        return (float(qth[0]), float(qth[1]), int(qth[2]))
+        if hasattr(source, 'qth'):
+            source = source.qth() if callable(source.qth) else source.qth
+        assert len(source) == 3, "%s does not match: (lat(N), long(W), alt(m))" % source
+        return (float(source[0]), float(source[1]), int(source[2]))
     except ValueError as e:
-        raise PredictException("Unable to convert '%s' (%s)" % (qth, str(e)))
+        raise PredictException("Unable to convert '%s' (%s)" % (source, str(e)))
     except Exception as e:
         raise PredictException(e)
 
-def observe(tle, qth, at=None):
-    tle = massage_tle(tle)
-    qth = massage_qth(qth)
+def observe(sat, site, at=None):
+    tle = load_tle(sat)
+    qth = load_qth(site)
     if at is None:
         at = time.time()
     return quick_find(tle, at, qth)
 
-def transits(tle, qth, ending_after=None, ending_before=None):
-    tle = massage_tle(tle)
-    qth = massage_qth(qth)
+def transits(sat, site, ending_after=None, ending_before=None):
+    tle = load_tle(sat)
+    qth = load_qth(site)
     if ending_after is None:
         ending_after = time.time()
     ts = ending_after
     while True:
         transit = quick_predict(tle, ts, qth)
-        t = Transit(tle, qth, start=transit[0]['epoch'], end=transit[-1]['epoch'])
+        start = transit[0]['epoch']
+        end = transit[-1]['epoch']
+        t = Transit(sat, site, start, end, manual_tle=tle, manual_qth=qth)
         if (ending_before != None and t.end > ending_before):
             break
         if (t.end > ending_after):
@@ -46,9 +51,11 @@ def transits(tle, qth, ending_after=None, ending_before=None):
 
 # Transit is a convenience class representing a pass of a satellite over a groundstation.
 class Transit():
-    def __init__(self, tle, qth, start, end):
-        self.tle = massage_tle(tle)
-        self.qth = massage_qth(qth)
+    def __init__(self, sat, site, start, end, manual_tle=None, manual_qth=None):
+        self.sat = sat
+        self.site = site
+        self.tle = manual_tle or load_tle(sat)
+        self.qth = manual_qth or load_qth(site)
         self.start = start
         self.end = end
 
