@@ -151,6 +151,9 @@ typedef struct observation {
 	char has_aos;
 	char decayed;
 	double doppler;
+    double sun_vector_x;
+    double sun_vector_y;
+    double sun_vector_z;
 } observation;
 
 struct	{
@@ -206,6 +209,7 @@ double	tsince, jul_epoch, jul_utc, eclipse_depth=0,
 	sun_azi, sun_ele, daynum, fm, fk, age, aostime,
 	lostime, ax, ay, az, rx, ry, rz, squint, alat, alon,
 	sun_ra, sun_dec, sun_lat, sun_lon, sun_range, sun_range_rate,
+	sun_x, sun_y, sun_z,
 	moon_az, moon_el, moon_dx, moon_ra, moon_dec, moon_gha, moon_dv;
 
 char	qthfile[50], tlefile[50], dbfile[50], temp[80], output[25],
@@ -3051,6 +3055,10 @@ void Calc()
 
 	sun_azi=Degrees(solar_set.x); 
 	sun_ele=Degrees(solar_set.y);
+	sun_x = solar_vector.x;
+	sun_y = solar_vector.y;
+	sun_z = solar_vector.z;
+
 
 	irk=(long)rint(sat_range);
 	isplat=(int)rint(sat_lat);
@@ -3318,6 +3326,9 @@ int MakeObservation(double obs_time, struct observation * obs) {
     obs->has_aos = aoshappens;
     obs->decayed = decayed;
     obs->doppler = doppler100;
+    obs->sun_vector_x = sun_x;
+    obs->sun_vector_y = sun_y;
+    obs->sun_vector_z = sun_z;
     return 0;
 }
 
@@ -3347,7 +3358,7 @@ void PrintObservation(struct observation * obs) {
 
 PyObject * PythonifyObservation(observation * obs) {
 	//TODO: Add reference count?
-	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:c,s:i,s:l,s:i,s:i,s:i,s:d}",
+	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:c,s:i,s:l,s:i,s:i,s:i,s:d,s:d,s:d,s:d}",
 		"norad_id", obs->norad_id,
 		"name", obs->name,
 		"epoch", obs->epoch,
@@ -3368,7 +3379,10 @@ PyObject * PythonifyObservation(observation * obs) {
 		"geostationary", obs->geostationary,
 		"has_aos", obs->has_aos,
 		"decayed", obs->decayed,
-		"doppler", obs->doppler
+		"doppler", obs->doppler,
+		"sun_vector_x", obs->sun_vector_x,
+        "sun_vector_y", obs->sun_vector_y,
+        "sun_vector_z", obs->sun_vector_z
 	);
 }
 
