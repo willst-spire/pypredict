@@ -151,10 +151,25 @@ typedef struct observation {
 	char has_aos;
 	char decayed;
 	double doppler;
-    double sun_vector_x;
-    double sun_vector_y;
-    double sun_vector_z;
 } observation;
+
+// This struct represents an solarobservation of a particular satellite
+// from a particular reference point (on earth) at a particular time
+// and is used primarily in the PyPredict code.
+typedef struct solarobservation {
+	double epoch;
+	char orbital_model[5];
+	long norad_id;
+	char name[25];
+	char sunlit;
+	char visibility;
+    double sun_x;
+    double sun_y;
+    double sun_z;
+    double sat_x;
+    double sat_y;
+    double sat_z;
+} solarobservation;
 
 struct	{
 	   char line1[70];       // First line of TLE
@@ -209,7 +224,7 @@ double	tsince, jul_epoch, jul_utc, eclipse_depth=0,
 	sun_azi, sun_ele, daynum, fm, fk, age, aostime,
 	lostime, ax, ay, az, rx, ry, rz, squint, alat, alon,
 	sun_ra, sun_dec, sun_lat, sun_lon, sun_range, sun_range_rate,
-	sun_x, sun_y, sun_z,
+	sat_x, sat_y, sat_z, sun_x, sun_y, sun_z,
 	moon_az, moon_el, moon_dx, moon_ra, moon_dec, moon_gha, moon_dv;
 
 char	qthfile[50], tlefile[50], dbfile[50], temp[80], output[25],
@@ -3055,9 +3070,12 @@ void Calc()
 
 	sun_azi=Degrees(solar_set.x); 
 	sun_ele=Degrees(solar_set.y);
-	sun_x = solar_vector.x;
-	sun_y = solar_vector.y;
-	sun_z = solar_vector.z;
+	sat_x=pos.x;
+	sat_y=pos.y;
+	sat_z=pos.z;
+	sun_x=solar_vector.x;
+	sun_y=solar_vector.y;
+	sun_z=solar_vector.z;
 
 
 	irk=(long)rint(sat_range);
@@ -3326,9 +3344,55 @@ int MakeObservation(double obs_time, struct observation * obs) {
     obs->has_aos = aoshappens;
     obs->decayed = decayed;
     obs->doppler = doppler100;
-    obs->sun_vector_x = sun_x;
-    obs->sun_vector_y = sun_y;
-    obs->sun_vector_z = sun_z;
+    return 0;
+}
+
+int MakeSolarObservation(double obs_time, struct solarobservation * obs) {
+    char geostationary=0, aoshappens=0, decayed=0, visibility=0, sunlit;
+    double sunx=0.0, suny=0.0, sunz=0.0, satx=0.0, saty=0.0, satz=0.0;
+    double doppler100=0.0, delay;
+
+    PreCalc(0);
+    indx=0;
+
+    if (sat_db.transponders>0)
+    {
+        PyErr_SetString(PredictException, "pypredict does not support transponder definition.");
+        return -1;
+    }
+
+    daynum=obs_time;
+    aoshappens=AosHappens(indx);
+    geostationary=Geostationary(indx);
+    decayed=Decayed(indx,0.0);
+
+    //Calcs
+    Calc();
+
+    if (sat_sun_status)
+    {
+        if (sun_ele<=-12.0 && sat_ele>=0.0) {
+            visibility='V';
+        } else {
+            visibility='D';
+        }
+    } else {
+        visibility='N';
+    }
+    // gathering power seems much more useful than naked-eye visibility
+    sunlit = sat_sun_status;
+
+    obs->norad_id = sat.catnum;
+    strncpy(&(obs->name), &(sat.name), sizeof(obs->name));
+    obs->epoch = (daynum+3651.0)*(86400.0); //See daynum=((start/86400.0)-3651.0);
+    obs->sunlit = sunlit;
+    obs->visibility = visibility;
+    obs->sun_x = sun_x - sat_x;
+    obs->sun_y = sun_y - sat_y;
+    obs->sun_z = sun_z - sat_z;
+    obs->sat_x = -1 * sat_x;
+    obs->sat_y = -1 * sat_y;
+    obs->sat_z = -1 * sat_z;
     return 0;
 }
 
@@ -3358,7 +3422,7 @@ void PrintObservation(struct observation * obs) {
 
 PyObject * PythonifyObservation(observation * obs) {
 	//TODO: Add reference count?
-	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:c,s:i,s:l,s:i,s:i,s:i,s:d,s:d,s:d,s:d}",
+	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:c,s:i,s:l,s:i,s:i,s:i,s:d}",
 		"norad_id", obs->norad_id,
 		"name", obs->name,
 		"epoch", obs->epoch,
@@ -3379,10 +3443,24 @@ PyObject * PythonifyObservation(observation * obs) {
 		"geostationary", obs->geostationary,
 		"has_aos", obs->has_aos,
 		"decayed", obs->decayed,
-		"doppler", obs->doppler,
-		"sun_vector_x", obs->sun_vector_x,
-        "sun_vector_y", obs->sun_vector_y,
-        "sun_vector_z", obs->sun_vector_z
+		"doppler", obs->doppler
+	);
+}
+
+PyObject * PythonifySolarObservation(solarobservation * obs) {
+	//TODO: Add reference count?
+	return Py_BuildValue("{s:l,s:s,s:d,s:i,s:c,s:d,s:d,s:d,s:d,s:d,s:d}",
+		"norad_id", obs->norad_id,
+		"name", obs->name,
+		"epoch", obs->epoch,
+		"sunlit", obs->sunlit,
+        "visibility", obs->visibility,
+        "sun_x", obs->sun_x,
+        "sun_y", obs->sun_y,
+        "sun_z", obs->sun_z,
+        "sat_x", obs->sat_x,
+        "sat_y", obs->sat_y,
+        "sat_z", obs->sat_z
 	);
 }
 
@@ -3451,6 +3529,22 @@ char load(PyObject *args)
 
 	return 0;
 }
+
+static PyObject* quick_sun_find(PyObject* self, PyObject *args)
+{
+	struct solarobservation obs = { 0 };
+
+	if (load(args) != 0 || MakeSolarObservation(daynum, &obs) != 0)
+	{
+		// load or MakeSolarObservation will set appropriate exceptions if either fails.
+		return NULL;
+	}
+
+	return PythonifySolarObservation(&obs);
+}
+
+static char quick_sun_find_docs[] =
+    "quick_sun_find((tle_line0, tle_line1, tle_line2), time, (gs_lat, gs_lon, gs_alt))\n";
 
 static PyObject* quick_find(PyObject* self, PyObject *args)
 {
@@ -3590,6 +3684,7 @@ static char quick_predict_docs[] =
 
 static PyMethodDef pypredict_funcs[] = {
     {"quick_find"   , (PyCFunction)quick_find   , METH_VARARGS, quick_find_docs},
+    {"quick_sun_find"   , (PyCFunction)quick_sun_find   , METH_VARARGS, quick_sun_find_docs},
     {"quick_predict", (PyCFunction)quick_predict, METH_VARARGS, quick_predict_docs},
     {NULL, NULL, 0, NULL} 
 };

@@ -2,7 +2,7 @@ import sys
 import os
 import time
 from copy import copy
-from cpredict import quick_find, quick_predict, PredictException
+from cpredict import quick_find, quick_sun_find, quick_predict, PredictException
 
 STR_TYPE = str if sys.version_info.major > 2 else basestring  # Quick python3 compatibility
 
@@ -35,6 +35,13 @@ def massage_qth(qth):
         raise PredictException("Unable to convert '%s' (%s)" % (qth, e))
     except Exception as e:
         raise PredictException(e)
+
+def sun_observe(tle, qth, at=None):
+    tle = massage_tle(tle)
+    qth = massage_qth(qth)
+    if at is None:
+        at = time.time()
+    return quick_sun_find(tle, at, qth)
 
 def observe(tle, qth, at=None):
     tle = massage_tle(tle)
