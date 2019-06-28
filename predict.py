@@ -36,11 +36,10 @@ def massage_qth(qth):
     except Exception as e:
         raise PredictException(e)
 
-def sun_observe(tle, qth, at=None):
+def solar_vectors(tle, at):
     tle = massage_tle(tle)
+    qth = (0, 0, 0)
     qth = massage_qth(qth)
-    if at is None:
-        at = time.time()
     return quick_sun_find(tle, at, qth)
 
 def observe(tle, qth, at=None):

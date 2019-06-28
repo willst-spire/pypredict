@@ -3348,9 +3348,7 @@ int MakeObservation(double obs_time, struct observation * obs) {
 }
 
 int MakeSolarObservation(double obs_time, struct solarobservation * obs) {
-    char geostationary=0, aoshappens=0, decayed=0, visibility=0, sunlit;
-    double sunx=0.0, suny=0.0, sunz=0.0, satx=0.0, saty=0.0, satz=0.0;
-    double doppler100=0.0, delay;
+    char visibility=0, sunlit;
 
     PreCalc(0);
     indx=0;
@@ -3362,9 +3360,6 @@ int MakeSolarObservation(double obs_time, struct solarobservation * obs) {
     }
 
     daynum=obs_time;
-    aoshappens=AosHappens(indx);
-    geostationary=Geostationary(indx);
-    decayed=Decayed(indx,0.0);
 
     //Calcs
     Calc();
