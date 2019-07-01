@@ -153,23 +153,26 @@ typedef struct observation {
 	double doppler;
 } observation;
 
-// This struct represents an solarobservation of a particular satellite
-// from a particular reference point (on earth) at a particular time
+// This struct represents an instance of orientationvectors of a particular satellite
+// from the reference of the satellite at a particular time
 // and is used primarily in the PyPredict code.
-typedef struct solarobservation {
+typedef struct orientationvectors {
 	double epoch;
 	char orbital_model[5];
 	long norad_id;
 	char name[25];
 	char sunlit;
 	char visibility;
-    double sun_x;
-    double sun_y;
-    double sun_z;
-    double sat_x;
-    double sat_y;
-    double sat_z;
-} solarobservation;
+    double sun_pos_x;
+    double sun_pos_y;
+    double sun_pos_z;
+    double earth_pos_x;
+    double earth_pos_y;
+    double earth_pos_z;
+    double sat_vel_x;
+    double sat_vel_y;
+    double sat_vel_z;
+} orientationvectors;
 
 struct	{
 	   char line1[70];       // First line of TLE
@@ -224,7 +227,8 @@ double	tsince, jul_epoch, jul_utc, eclipse_depth=0,
 	sun_azi, sun_ele, daynum, fm, fk, age, aostime,
 	lostime, ax, ay, az, rx, ry, rz, squint, alat, alon,
 	sun_ra, sun_dec, sun_lat, sun_lon, sun_range, sun_range_rate,
-	sat_x, sat_y, sat_z, sun_x, sun_y, sun_z,
+	sat_pos_x, sat_pos_y, sat_pos_z, sat_vel_x, sat_vel_y, sat_vel_z,
+	sun_pos_x, sun_pos_y, sun_pos_z,
 	moon_az, moon_el, moon_dx, moon_ra, moon_dec, moon_gha, moon_dv;
 
 char	qthfile[50], tlefile[50], dbfile[50], temp[80], output[25],
@@ -3070,12 +3074,15 @@ void Calc()
 
 	sun_azi=Degrees(solar_set.x); 
 	sun_ele=Degrees(solar_set.y);
-	sat_x=pos.x;
-	sat_y=pos.y;
-	sat_z=pos.z;
-	sun_x=solar_vector.x;
-	sun_y=solar_vector.y;
-	sun_z=solar_vector.z;
+	sat_pos_x=pos.x;
+	sat_pos_y=pos.y;
+	sat_pos_z=pos.z;
+	sat_vel_x=vel.x;
+	sat_vel_y=vel.y;
+	sat_vel_z=vel.z;
+	sun_pos_x=solar_vector.x;
+	sun_pos_y=solar_vector.y;
+	sun_pos_z=solar_vector.z;
 
 
 	irk=(long)rint(sat_range);
@@ -3347,7 +3354,7 @@ int MakeObservation(double obs_time, struct observation * obs) {
     return 0;
 }
 
-int MakeSolarObservation(double obs_time, struct solarobservation * obs) {
+int MakeOrientationVector(double obs_time, struct orientationvectors * obs) {
     char visibility=0, sunlit;
 
     PreCalc(0);
@@ -3382,12 +3389,15 @@ int MakeSolarObservation(double obs_time, struct solarobservation * obs) {
     obs->epoch = (daynum+3651.0)*(86400.0); //See daynum=((start/86400.0)-3651.0);
     obs->sunlit = sunlit;
     obs->visibility = visibility;
-    obs->sun_x = sun_x - sat_x;
-    obs->sun_y = sun_y - sat_y;
-    obs->sun_z = sun_z - sat_z;
-    obs->sat_x = -1 * sat_x;
-    obs->sat_y = -1 * sat_y;
-    obs->sat_z = -1 * sat_z;
+    obs->sun_pos_x = sun_pos_x - sat_pos_x;
+    obs->sun_pos_y = sun_pos_y - sat_pos_y;
+    obs->sun_pos_z = sun_pos_z - sat_pos_z;
+    obs->earth_pos_x = -1 * sat_pos_x;
+    obs->earth_pos_y = -1 * sat_pos_y;
+    obs->earth_pos_z = -1 * sat_pos_z;
+    obs->sat_vel_x =sat_vel_x;
+    obs->sat_vel_y =sat_vel_y;
+    obs->sat_vel_z =sat_vel_z;
     return 0;
 }
 
@@ -3442,20 +3452,23 @@ PyObject * PythonifyObservation(observation * obs) {
 	);
 }
 
-PyObject * PythonifySolarObservation(solarobservation * obs) {
+PyObject * PythonifyOrientationVectors(orientationvectors * obs) {
 	//TODO: Add reference count?
-	return Py_BuildValue("{s:l,s:s,s:d,s:i,s:c,s:d,s:d,s:d,s:d,s:d,s:d}",
+	return Py_BuildValue("{s:l,s:s,s:d,s:i,s:c,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d}",
 		"norad_id", obs->norad_id,
 		"name", obs->name,
 		"epoch", obs->epoch,
 		"sunlit", obs->sunlit,
         "visibility", obs->visibility,
-        "sun_x", obs->sun_x,
-        "sun_y", obs->sun_y,
-        "sun_z", obs->sun_z,
-        "sat_x", obs->sat_x,
-        "sat_y", obs->sat_y,
-        "sat_z", obs->sat_z
+        "sun_pos_x", obs->sun_pos_x,
+        "sun_pos_y", obs->sun_pos_y,
+        "sun_pos_z", obs->sun_pos_z,
+        "earth_pos_x", obs->earth_pos_x,
+        "earth_pos_y", obs->earth_pos_y,
+        "earth_pos_z", obs->earth_pos_z,
+        "sat_vel_x", obs->sat_vel_x,
+        "sat_vel_y", obs->sat_vel_y,
+        "sat_vel_z", obs->sat_vel_z
 	);
 }
 
@@ -3525,21 +3538,21 @@ char load(PyObject *args)
 	return 0;
 }
 
-static PyObject* quick_sun_find(PyObject* self, PyObject *args)
+static PyObject* quick_orientation(PyObject* self, PyObject *args)
 {
-	struct solarobservation obs = { 0 };
+	struct orientationvectors obs = { 0 };
 
-	if (load(args) != 0 || MakeSolarObservation(daynum, &obs) != 0)
+	if (load(args) != 0 || MakeOrientationVector(daynum, &obs) != 0)
 	{
-		// load or MakeSolarObservation will set appropriate exceptions if either fails.
+		// load or MakeOrientationVector will set appropriate exceptions if either fails.
 		return NULL;
 	}
 
-	return PythonifySolarObservation(&obs);
+	return PythonifyOrientationVectors(&obs);
 }
 
-static char quick_sun_find_docs[] =
-    "quick_sun_find((tle_line0, tle_line1, tle_line2), time, (gs_lat, gs_lon, gs_alt))\n";
+static char quick_orientation_docs[] =
+    "quick_orientation((tle_line0, tle_line1, tle_line2), time, (gs_lat, gs_lon, gs_alt))\n";
 
 static PyObject* quick_find(PyObject* self, PyObject *args)
 {
@@ -3679,7 +3692,7 @@ static char quick_predict_docs[] =
 
 static PyMethodDef pypredict_funcs[] = {
     {"quick_find"   , (PyCFunction)quick_find   , METH_VARARGS, quick_find_docs},
-    {"quick_sun_find"   , (PyCFunction)quick_sun_find   , METH_VARARGS, quick_sun_find_docs},
+    {"quick_orientation"   , (PyCFunction)quick_orientation   , METH_VARARGS, quick_orientation_docs},
     {"quick_predict", (PyCFunction)quick_predict, METH_VARARGS, quick_predict_docs},
     {NULL, NULL, 0, NULL} 
 };
