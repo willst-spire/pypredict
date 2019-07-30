@@ -173,6 +173,8 @@ typedef struct satellitedata {
     double beta_angle;
 	char sunlit;
 	long orbit;
+	char geostationary;
+	char decayed;
     double sun_pos_x;
     double sun_pos_y;
     double sun_pos_z;
@@ -3376,7 +3378,7 @@ int MakeObservation(double obs_time, struct observation * obs) {
 }
 
 int MakeSatData(double obs_time, struct satellitedata * satdata) {
-    char sunlit;
+    char geostationary=0, decayed=0, sunlit;
 
     PreCalc(0);
     indx=0;
@@ -3408,8 +3410,6 @@ int MakeSatData(double obs_time, struct satellitedata * satdata) {
 
     satdata->latitude = sat_lat;
     satdata->longitude = sat_lon;
-    satdata->azimuth = sat_azi;
-    satdata->elevation = sat_ele;
     satdata->orbital_velocity = 3600.0*sat_vel;
     satdata->orbital_bearing = 0;
     satdata->footprint = fk;
@@ -3418,9 +3418,7 @@ int MakeSatData(double obs_time, struct satellitedata * satdata) {
 
     satdata->eclipse_depth = eclipse_depth/deg2rad;
     satdata->orbital_phase = 256.0*(phase/twopi);
-    strncpy(&(obs->orbital_model), &(ephem), sizeof(obs->orbital_model));
-
-    satdata->visibility = visibility;
+    strncpy(&(satdata->orbital_model), &(ephem), sizeof(satdata->orbital_model));
 
     satdata->sunlit = sunlit;
     satdata->orbit = rv;
@@ -3493,14 +3491,12 @@ PyObject * PythonifyObservation(observation * obs) {
 
 PyObject * PythonifySatData(satellitedata * obs) {
 	//TODO: Add reference count?
-	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:i,s:l,s:i,s:i,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d}",
+	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:i,s:l,s:i,s:i,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d}",
 		"norad_id", obs->norad_id,
 		"name", obs->name,
 		"epoch", obs->epoch,
 		"latitude", obs->latitude,
 		"longitude", obs->longitude,
-		"azimuth", obs->azimuth,
-		"elevation", obs->elevation,
 		"orbital_velocity", obs->orbital_velocity,
         "orbital_bearing", obs->orbital_bearing,
 		"footprint", obs->footprint,
