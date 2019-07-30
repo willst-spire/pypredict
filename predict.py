@@ -38,7 +38,7 @@ def massage_qth(qth):
 
 def satellite_data(tle, at):
     tle = massage_tle(tle)
-    ignored_qth = (float(0), float(0), float(0))
+    ignored_qth = massage_qth((0,0,0))
     return quick_sat_data(tle, at, ignored_qth)
 
 def observe(tle, qth, at=None):

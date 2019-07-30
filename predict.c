@@ -3431,9 +3431,9 @@ int MakeSatData(double obs_time, struct satellitedata * satdata) {
     satdata->sat_pos_x = sat_pos_x;
     satdata->sat_pos_y = sat_pos_y;
     satdata->sat_pos_z = sat_pos_z;
-    satdata->sat_vel_x =sat_vel_x;
-    satdata->sat_vel_y =sat_vel_y;
-    satdata->sat_vel_z =sat_vel_z;
+    satdata->sat_vel_x = sat_vel_x;
+    satdata->sat_vel_y = sat_vel_y;
+    satdata->sat_vel_z = sat_vel_z;
 
     return 0;
 }
@@ -3491,7 +3491,18 @@ PyObject * PythonifyObservation(observation * obs) {
 
 PyObject * PythonifySatData(satellitedata * obs) {
 	//TODO: Add reference count?
-	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:i,s:l,s:i,s:i,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d}",
+    PyObject *eci_vectors = Py_BuildValue("{s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d}",
+        "sun_pos_x", obs->sun_pos_x,
+        "sun_pos_y", obs->sun_pos_y,
+        "sun_pos_z", obs->sun_pos_z,
+        "sat_pos_x", obs->sat_pos_x,
+        "sat_pos_y", obs->sat_pos_y,
+        "sat_pos_z", obs->sat_pos_z,
+        "sat_vel_x", obs->sat_vel_x,
+        "sat_vel_y", obs->sat_vel_y,
+        "sat_vel_z", obs->sat_vel_z);
+
+	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:i,s:l,s:i,s:i,s:d,s:O}",
 		"norad_id", obs->norad_id,
 		"name", obs->name,
 		"epoch", obs->epoch,
@@ -3509,16 +3520,7 @@ PyObject * PythonifySatData(satellitedata * obs) {
 		"geostationary", obs->geostationary,
 		"decayed", obs->decayed,
 		"beta_angle", obs->beta_angle,
-        "sun_pos_x", obs->sun_pos_x,
-        "sun_pos_y", obs->sun_pos_y,
-        "sun_pos_z", obs->sun_pos_z,
-        "sat_pos_x", obs->sat_pos_x,
-        "sat_pos_y", obs->sat_pos_y,
-        "sat_pos_z", obs->sat_pos_z,
-        "sat_vel_x", obs->sat_vel_x,
-        "sat_vel_y", obs->sat_vel_y,
-        "sat_vel_z", obs->sat_vel_z
-	);
+		"eci_vectors", eci_vectors);
 }
 
 char load(PyObject *args)
