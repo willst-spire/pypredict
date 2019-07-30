@@ -114,6 +114,7 @@
 #define EPOCH_RESTART_FLAG     0x001000
 #define VISIBLE_FLAG           0x002000
 #define SAT_ECLIPSED_FLAG      0x004000
+#define IGNORE_OBS_DATA_FLAG   0x008000
 
 // Python Extension Globals
 static PyObject *PredictException;
@@ -156,23 +157,32 @@ typedef struct observation {
 // This struct represents an instance of orientationvectors of a particular satellite
 // from the reference of the satellite at a particular time
 // and is used primarily in the PyPredict code.
-typedef struct orientationvectors {
+typedef struct satellitedata {
 	double epoch;
 	char orbital_model[5];
 	long norad_id;
 	char name[25];
+	double latitude;
+	double longitude;
+	double altitude;
+	double orbital_velocity;
+	double orbital_bearing;
+	double footprint;
+	double eclipse_depth;
+	double orbital_phase;
+    double beta_angle;
 	char sunlit;
-	char visibility;
+	long orbit;
     double sun_pos_x;
     double sun_pos_y;
     double sun_pos_z;
-    double earth_pos_x;
-    double earth_pos_y;
-    double earth_pos_z;
+    double sat_pos_x;
+    double sat_pos_y;
+    double sat_pos_z;
     double sat_vel_x;
     double sat_vel_y;
     double sat_vel_z;
-} orientationvectors;
+    } satellitedata;
 
 struct	{
 	   char line1[70];       // First line of TLE
@@ -3018,27 +3028,32 @@ void Calc()
 	Magnitude(&vel);
 	sat_vel=vel.w;
 
-	/** All angles in rads. Distance in km. Velocity in km/s **/
-	/* Calculate satellite Azi, Ele, Range and Range-rate */
-
-	Calculate_Obs(jul_utc, &pos, &vel, &obs_geodetic, &obs_set);
-
 	/* Calculate satellite Lat North, Lon East and Alt. */
 
 	Calculate_LatLonAlt(jul_utc, &pos, &sat_geodetic);
-
-	/* Calculate squint angle */
-
-	if (calc_squint)
-	{
-		squint=(acos(-(ax*rx+ay*ry+az*rz)/obs_set.z))/deg2rad;
-	}
 
 	/* Calculate solar position and satellite eclipse depth. */
 	/* Also set or clear the satellite eclipsed flag accordingly. */
 
 	Calculate_Solar_Position(jul_utc, &solar_vector);
-	Calculate_Obs(jul_utc, &solar_vector, &zero_vector, &obs_geodetic, &solar_set);
+
+	if (isFlagClear(IGNORE_OBS_DATA_FLAG))
+	{
+		/** All angles in rads. Distance in km. Velocity in km/s **/
+	    /* Calculate satellite Azi, Ele, Range and Range-rate */
+        Calculate_Obs(jul_utc, &pos, &vel, &obs_geodetic, &obs_set);
+
+	    /* Calculate sun Azi, Ele,. */
+	    Calculate_Obs(jul_utc, &solar_vector, &zero_vector, &obs_geodetic, &solar_set);
+
+	    /* Calculate squint angle */
+
+        if (calc_squint)
+        {
+            squint=(acos(-(ax*rx+ay*ry+az*rz)/obs_set.z))/deg2rad;
+        }
+    }
+
 
 	if (Sat_Eclipsed(&pos, &solar_vector, &eclipse_depth))
 	{
@@ -3059,21 +3074,25 @@ void Calc()
 	}
 
 	/* Convert satellite and solar data */
-	sat_azi=Degrees(obs_set.x);
-	sat_ele=Degrees(obs_set.y);
-	sat_range=obs_set.z;
-	sat_range_rate=obs_set.w;
+
+	if (isFlagClear(IGNORE_OBS_DATA_FLAG))
+	{
+		sat_azi=Degrees(obs_set.x);
+        sat_ele=Degrees(obs_set.y);
+        sat_range=obs_set.z;
+        sat_range_rate=obs_set.w;
+
+        sun_azi=Degrees(solar_set.x);
+	    sun_ele=Degrees(solar_set.y);
+
+        irk=(long)rint(sat_range);
+        iaz=(int)rint(sat_azi);
+	    iel=(int)rint(sat_ele);
+    }
+
 	sat_lat=Degrees(sat_geodetic.lat);
 	sat_lon=Degrees(sat_geodetic.lon);
 	sat_alt=sat_geodetic.alt;
-
-	fk=12756.33*acos(xkmper/(xkmper+sat_alt));
-	fm=fk/1.609344;
-
-	rv=(long)floor((tle.xno*xmnpda/twopi+age*tle.bstar*ae)*age+tle.xmo/twopi)+tle.revnum;
-
-	sun_azi=Degrees(solar_set.x); 
-	sun_ele=Degrees(solar_set.y);
 	sat_pos_x=pos.x;
 	sat_pos_y=pos.y;
 	sat_pos_z=pos.z;
@@ -3084,12 +3103,14 @@ void Calc()
 	sun_pos_y=solar_vector.y;
 	sun_pos_z=solar_vector.z;
 
+	fk=12756.33*acos(xkmper/(xkmper+sat_alt));
+	fm=fk/1.609344;
 
-	irk=(long)rint(sat_range);
+	rv=(long)floor((tle.xno*xmnpda/twopi+age*tle.bstar*ae)*age+tle.xmo/twopi)+tle.revnum;
+
 	isplat=(int)rint(sat_lat);
 	isplong=(int)rint(360.0-sat_lon);
-	iaz=(int)rint(sat_azi);
-	iel=(int)rint(sat_ele);
+
 	ma256=(int)rint(256.0*(phase/twopi));
 
 	if (sat_sun_status)
@@ -3354,8 +3375,8 @@ int MakeObservation(double obs_time, struct observation * obs) {
     return 0;
 }
 
-int MakeOrientationVector(double obs_time, struct orientationvectors * obs) {
-    char visibility=0, sunlit;
+int MakeSatData(double obs_time, struct satellitedata * satdata) {
+    char sunlit;
 
     PreCalc(0);
     indx=0;
@@ -3367,37 +3388,55 @@ int MakeOrientationVector(double obs_time, struct orientationvectors * obs) {
     }
 
     daynum=obs_time;
+    geostationary=Geostationary(indx);
+    decayed=Decayed(indx,0.0);
 
     //Calcs
+    SetFlag(IGNORE_OBS_DATA_FLAG);
     Calc();
+    ClearFlag(IGNORE_OBS_DATA_FLAG);
 
-    if (sat_sun_status)
-    {
-        if (sun_ele<=-12.0 && sat_ele>=0.0) {
-            visibility='V';
-        } else {
-            visibility='D';
-        }
-    } else {
-        visibility='N';
-    }
+    fk=12756.33*acos(xkmper/(xkmper+sat_alt));
+
     // gathering power seems much more useful than naked-eye visibility
     sunlit = sat_sun_status;
 
-    obs->norad_id = sat.catnum;
-    strncpy(&(obs->name), &(sat.name), sizeof(obs->name));
-    obs->epoch = (daynum+3651.0)*(86400.0); //See daynum=((start/86400.0)-3651.0);
-    obs->sunlit = sunlit;
-    obs->visibility = visibility;
-    obs->sun_pos_x = sun_pos_x - sat_pos_x;
-    obs->sun_pos_y = sun_pos_y - sat_pos_y;
-    obs->sun_pos_z = sun_pos_z - sat_pos_z;
-    obs->earth_pos_x = -1 * sat_pos_x;
-    obs->earth_pos_y = -1 * sat_pos_y;
-    obs->earth_pos_z = -1 * sat_pos_z;
-    obs->sat_vel_x =sat_vel_x;
-    obs->sat_vel_y =sat_vel_y;
-    obs->sat_vel_z =sat_vel_z;
+    satdata->norad_id = sat.catnum;
+    strncpy(&(satdata->name), &(sat.name), sizeof(satdata->name));
+    satdata->epoch = (daynum+3651.0)*(86400.0); //See daynum=((start/86400.0)-3651.0);
+    satdata->sunlit = sunlit;
+
+    satdata->latitude = sat_lat;
+    satdata->longitude = sat_lon;
+    satdata->azimuth = sat_azi;
+    satdata->elevation = sat_ele;
+    satdata->orbital_velocity = 3600.0*sat_vel;
+    satdata->orbital_bearing = 0;
+    satdata->footprint = fk;
+    satdata->altitude = sat_alt;
+    satdata->beta_angle = 0;
+
+    satdata->eclipse_depth = eclipse_depth/deg2rad;
+    satdata->orbital_phase = 256.0*(phase/twopi);
+    strncpy(&(obs->orbital_model), &(ephem), sizeof(obs->orbital_model));
+
+    satdata->visibility = visibility;
+
+    satdata->sunlit = sunlit;
+    satdata->orbit = rv;
+    satdata->geostationary = geostationary;
+    satdata->decayed = decayed;
+
+    satdata->sun_pos_x = sun_pos_x;
+    satdata->sun_pos_y = sun_pos_y;
+    satdata->sun_pos_z = sun_pos_z;
+    satdata->sat_pos_x = sat_pos_x;
+    satdata->sat_pos_y = sat_pos_y;
+    satdata->sat_pos_z = sat_pos_z;
+    satdata->sat_vel_x =sat_vel_x;
+    satdata->sat_vel_y =sat_vel_y;
+    satdata->sat_vel_z =sat_vel_z;
+
     return 0;
 }
 
@@ -3452,20 +3491,34 @@ PyObject * PythonifyObservation(observation * obs) {
 	);
 }
 
-PyObject * PythonifyOrientationVectors(orientationvectors * obs) {
+PyObject * PythonifySatData(satellitedata * obs) {
 	//TODO: Add reference count?
-	return Py_BuildValue("{s:l,s:s,s:d,s:i,s:c,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d}",
+	return Py_BuildValue("{s:l,s:s,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:s,s:i,s:l,s:i,s:i,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:d}",
 		"norad_id", obs->norad_id,
 		"name", obs->name,
 		"epoch", obs->epoch,
+		"latitude", obs->latitude,
+		"longitude", obs->longitude,
+		"azimuth", obs->azimuth,
+		"elevation", obs->elevation,
+		"orbital_velocity", obs->orbital_velocity,
+        "orbital_bearing", obs->orbital_bearing,
+		"footprint", obs->footprint,
+		"altitude", obs->altitude,
+		"eclipse_depth", obs->eclipse_depth,
+		"orbital_phase", obs->orbital_phase,
+		"orbital_model", obs->orbital_model,
 		"sunlit", obs->sunlit,
-        "visibility", obs->visibility,
+		"orbit", obs->orbit,
+		"geostationary", obs->geostationary,
+		"decayed", obs->decayed,
+		"beta_angle", obs->beta_angle,
         "sun_pos_x", obs->sun_pos_x,
         "sun_pos_y", obs->sun_pos_y,
         "sun_pos_z", obs->sun_pos_z,
-        "earth_pos_x", obs->earth_pos_x,
-        "earth_pos_y", obs->earth_pos_y,
-        "earth_pos_z", obs->earth_pos_z,
+        "sat_pos_x", obs->sat_pos_x,
+        "sat_pos_y", obs->sat_pos_y,
+        "sat_pos_z", obs->sat_pos_z,
         "sat_vel_x", obs->sat_vel_x,
         "sat_vel_y", obs->sat_vel_y,
         "sat_vel_z", obs->sat_vel_z
@@ -3538,21 +3591,21 @@ char load(PyObject *args)
 	return 0;
 }
 
-static PyObject* quick_orientation(PyObject* self, PyObject *args)
+static PyObject* quick_sat_data(PyObject* self, PyObject *args)
 {
-	struct orientationvectors obs = { 0 };
+	struct satellitedata obs = { 0 };
 
-	if (load(args) != 0 || MakeOrientationVector(daynum, &obs) != 0)
+	if (load(args) != 0 || MakeSatData(daynum, &obs) != 0)
 	{
 		// load or MakeOrientationVector will set appropriate exceptions if either fails.
 		return NULL;
 	}
 
-	return PythonifyOrientationVectors(&obs);
+	return PythonifySatData(&obs);
 }
 
-static char quick_orientation_docs[] =
-    "quick_orientation((tle_line0, tle_line1, tle_line2), time, (gs_lat, gs_lon, gs_alt))\n";
+static char quick_sat_data_docs[] =
+    "quick_sat_data((tle_line0, tle_line1, tle_line2), time, (ignore_lat, ignore_lon, ignore_alt))\n";
 
 static PyObject* quick_find(PyObject* self, PyObject *args)
 {
@@ -3692,7 +3745,7 @@ static char quick_predict_docs[] =
 
 static PyMethodDef pypredict_funcs[] = {
     {"quick_find"   , (PyCFunction)quick_find   , METH_VARARGS, quick_find_docs},
-    {"quick_orientation"   , (PyCFunction)quick_orientation   , METH_VARARGS, quick_orientation_docs},
+    {"quick_sat_data"   , (PyCFunction)quick_sat_data   , METH_VARARGS, quick_sat_data_docs},
     {"quick_predict", (PyCFunction)quick_predict, METH_VARARGS, quick_predict_docs},
     {NULL, NULL, 0, NULL} 
 };

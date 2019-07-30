@@ -2,7 +2,7 @@ import sys
 import os
 import time
 from copy import copy
-from cpredict import quick_find, quick_orientation, quick_predict, PredictException
+from cpredict import quick_find, quick_sat_data, quick_predict, PredictException
 
 STR_TYPE = str if sys.version_info.major > 2 else basestring  # Quick python3 compatibility
 
@@ -36,11 +36,10 @@ def massage_qth(qth):
     except Exception as e:
         raise PredictException(e)
 
-def orientation_vectors(tle, at):
+def satellite_data(tle, at):
     tle = massage_tle(tle)
-    qth = (0, 0, 0)
-    qth = massage_qth(qth)
-    return quick_orientation(tle, at, qth)
+    ignored_qth = (float(0), float(0), float(0))
+    return quick_sat_data(tle, at, ignored_qth)
 
 def observe(tle, qth, at=None):
     tle = massage_tle(tle)
