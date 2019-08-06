@@ -10,6 +10,7 @@ QTH = (37.7727, 122.4070, 25)
 STEP = 15
 T1_IN_TRANSIT     = 1421214440.07
 T2_NOT_IN_TRANSIT = 1421202456.13
+TLE_TIME = 1421171253.42
 
 
 class TestPredict(unittest.TestCase):
@@ -27,6 +28,18 @@ class TestPredict(unittest.TestCase):
     at  = T2_NOT_IN_TRANSIT
     obs = predict.observe(tle, qth, at=at)
     self.assertTrue(obs['elevation'] < 0)
+
+    # should not raise a StopIteration
+    next_transit = next(predict.transits(tle, qth, ending_after=at))
+
+  def test_tle_valid_for_plus_minus_365_days(self):
+    #predict.massage_tle(EXAMPLE_QTH)
+
+    tle = predict.massage_tle(TLE)
+    qth = predict.massage_qth(QTH)
+
+    at  = TLE_TIME + 366 * 86400
+    obs = predict.observe(tle, qth, at=at)
 
     # should not raise a StopIteration
     next_transit = next(predict.transits(tle, qth, ending_after=at))

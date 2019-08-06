@@ -3456,7 +3456,7 @@ static char quick_find_docs[] =
 
 static PyObject* quick_predict(PyObject* self, PyObject *args)
 {
-	double now;
+	double now, tledaynum;
 	int lastel=0;
 	char errbuff[100];
 	observation obs = { 0 };
@@ -3475,10 +3475,10 @@ static PyObject* quick_predict(PyObject* self, PyObject *args)
 		goto cleanup_and_raise_exception;
 	}
 
-	//TODO: Seems like this should be based on the freshness of the TLE, not wall clock.
-	if ((daynum<now-365.0) || (daynum>now+365.0))
+    tledaynum = ((tle.epoch/86400.0)-3651.0);
+	if ((daynum<tledaynum-365.0) || (daynum>tledaynum+365.0))
 	{
-		sprintf(errbuff, "time %s too far from present\n", Daynum2String(daynum));
+		sprintf(errbuff, "time %s too far from TLE valid time.\n", Daynum2String(daynum));
 		PyErr_SetString(PredictException, errbuff);
 		goto cleanup_and_raise_exception;
 	}
